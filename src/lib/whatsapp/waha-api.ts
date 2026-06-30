@@ -106,6 +106,7 @@ export async function sendWahaTextMessage(
   const payload: Record<string, any> = {
     chatId,
     text,
+    session: config.waha_session,
   };
 
   if (replyToId) {
@@ -146,6 +147,7 @@ export async function sendWahaMediaMessage(
       name: filename || `file_${Date.now()}`,
     },
     caption: caption || '',
+    session: config.waha_session,
   };
 
   const res = await wahaFetch(config, '/api/sendFile', {
