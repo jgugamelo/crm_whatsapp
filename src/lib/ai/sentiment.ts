@@ -24,8 +24,19 @@ export async function analyzeConversationSentimentAndTags(
   }
 
   const configKey = aiConfig.api_key?.trim();
-  const hermesMasterKey = process.env.OPENROUTER_API_KEY;
-  const activeKey = aiConfig.api_provider === "hermes" && !configKey ? hermesMasterKey : configKey;
+
+  let masterKey = "";
+  if (aiConfig.api_provider === "hermes") {
+    masterKey = process.env.OPENROUTER_API_KEY || "";
+  } else if (aiConfig.api_provider === "openai") {
+    masterKey = process.env.OPENAI_API_KEY || "";
+  } else if (aiConfig.api_provider === "claude") {
+    masterKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+  } else if (aiConfig.api_provider === "gemini") {
+    masterKey = process.env.GEMINI_API_KEY || "";
+  }
+
+  const activeKey = !configKey ? masterKey : configKey;
 
   if (!activeKey) {
     return; // No active API key found
