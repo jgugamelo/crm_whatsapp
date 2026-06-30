@@ -6,6 +6,8 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { event, session, payload } = body
 
+    console.log('[waha/webhook] Received webhook event:', event, 'for session:', session)
+
     if (!event || !session || !payload) {
       return NextResponse.json({ error: 'Invalid WAHA webhook payload' }, { status: 400 })
     }
