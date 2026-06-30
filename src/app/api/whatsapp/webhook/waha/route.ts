@@ -66,6 +66,16 @@ export async function POST(request: Request) {
       const phone = `+${rawPhone}` // Normalize to E.164 format with + prefix
 
       const direction = fromMe ? 'outbound' : 'inbound'
+
+      // Ignore status broadcast updates (WhatsApp Stories) and group messages
+      if (
+        from === 'status@broadcast' || 
+        to === 'status@broadcast' ||
+        from.endsWith('@g.us') ||
+        to.endsWith('@g.us')
+      ) {
+        return NextResponse.json({ success: true, message: 'Ignored group or status broadcast update' })
+      }
       
       // Check if message already exists in DB to prevent duplicates
       const { data: existingMsg } = await db
