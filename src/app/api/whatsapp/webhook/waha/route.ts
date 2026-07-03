@@ -231,9 +231,20 @@ export async function POST(request: Request) {
         conversationId = newConv.id
       }
 
+      // Extract media URL if present in WAHA payload
+      let mediaUrl: string | null = null
+      if (hasMedia && payload.media) {
+        const filename = payload.media.filename
+        if (filename) {
+          mediaUrl = `${config.waha_url}/api/files/${filename}`
+        } else if (payload.media.url) {
+          mediaUrl = payload.media.url
+        }
+      }
+
       // Map WAHA message types to CRM content_type
       let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' = 'text'
-      if (type === 'image') contentType = 'image'
+      if (type === 'image' || type === 'sticker') contentType = 'image'
       else if (type === 'video') contentType = 'video'
       else if (type === 'audio' || type === 'ptt') contentType = 'audio'
       else if (type === 'document') contentType = 'document'
@@ -249,6 +260,7 @@ export async function POST(request: Request) {
           sender_type: fromMe ? 'agent' : 'customer',
           content_type: contentType,
           content_text: textBody || '',
+          media_url: mediaUrl,
           status: direction === 'inbound' ? 'read' : 'sent',
           created_at: messageDate,
         })
