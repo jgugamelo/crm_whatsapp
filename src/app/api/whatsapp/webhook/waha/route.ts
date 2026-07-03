@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     // ============================================================
     if (event === 'message' || event === 'message.any') {
       console.log('[waha/webhook] Message payload:', JSON.stringify(payload))
-      const { id: messageId, timestamp, from, to, body: textBody, fromMe, hasMedia, type } = payload
+      const { id: messageId, timestamp, from, to, body: textBody, fromMe, hasMedia, type, chatId } = payload
       
       let participantJid = fromMe ? to : from
 
@@ -90,7 +90,8 @@ export async function POST(request: Request) {
         from === 'status@broadcast' || 
         to === 'status@broadcast' ||
         (from && from.endsWith('@g.us')) ||
-        (to && to.endsWith('@g.us'))
+        (to && to.endsWith('@g.us')) ||
+        (chatId && chatId.endsWith('@g.us'))
       ) {
         return NextResponse.json({ success: true, message: 'Ignored group or status broadcast update' })
       }
