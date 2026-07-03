@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import type { Contact, Deal, ContactNote, Tag } from "@/types";
 import {
   Phone,
   Mail,
@@ -15,16 +14,25 @@ import {
   DollarSign,
   StickyNote,
   Plus,
+  Brain,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Contact, Deal, ContactNote, Tag, Conversation } from "@/types";
 import { format } from "date-fns";
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  conversation: Conversation | null;
+  onUpdateConversation?: (updates: Partial<Conversation>) => void;
 }
 
-export function ContactSidebar({ contact }: ContactSidebarProps) {
+export function ContactSidebar({
+  contact,
+  conversation,
+  onUpdateConversation,
+}: ContactSidebarProps) {
   const { accountId } = useAuth();
   const [copied, setCopied] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -32,6 +40,27 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const handleAnalyzeSentiment = useCallback(async () => {
+    if (!conversation) return;
+    setAnalyzing(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/sentiment`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onUpdateConversation?.({ sentiment: data.sentiment });
+      } else {
+        console.error("Failed to analyze sentiment:", data.error || "Unknown error");
+      }
+    } catch (err) {
+      console.error("Error analyzing sentiment:", err);
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [conversation, onUpdateConversation]);
 
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
@@ -173,6 +202,93 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
               </div>
             )}
           </div>
+
+          {/* Divider */}
+          <div className="my-4 border-t border-border" />
+
+          {/* Sentiment Analysis Card */}
+          {conversation && (
+            <div className="rounded-xl border border-border bg-card/50 p-3.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Brain className="h-3.5 w-3.5 text-primary" />
+                  Análise de Sentimento (IA)
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 rounded-full text-muted-foreground hover:text-foreground"
+                  disabled={analyzing}
+                  onClick={handleAnalyzeSentiment}
+                  title="Reanalisar conversa com IA"
+                >
+                  <RefreshCw className={cn("h-3 w-3", analyzing && "animate-spin")} />
+                </Button>
+              </div>
+
+              {/* Sentiment Display */}
+              {(() => {
+                const SENTIMENT_CONFIG: Record<
+                  string,
+                  { emoji: string; color: string; label: string; bg: string; border: string; desc: string }
+                > = {
+                  positive: {
+                    emoji: "😊",
+                    color: "text-emerald-500",
+                    bg: "bg-emerald-500/10",
+                    border: "border-emerald-500/20",
+                    label: "Positivo",
+                    desc: "O cliente demonstra satisfação, acordo ou interesse positivo nas mensagens recentes."
+                  },
+                  neutral: {
+                    emoji: "😐",
+                    color: "text-slate-400",
+                    bg: "bg-slate-500/10",
+                    border: "border-slate-500/20",
+                    label: "Neutro",
+                    desc: "O cliente mantém um tom formal, objetivo ou meramente informativo."
+                  },
+                  negative: {
+                    emoji: "😡",
+                    color: "text-rose-500",
+                    bg: "bg-rose-500/10",
+                    border: "border-rose-500/20",
+                    label: "Negativo",
+                    desc: "O cliente expressa frustração, insatisfação, reclamação ou recusa."
+                  },
+                  mixed: {
+                    emoji: "😕",
+                    color: "text-amber-500",
+                    bg: "bg-amber-500/10",
+                    border: "border-amber-500/20",
+                    label: "Misto",
+                    desc: "A conversa possui tons mistos, alternando entre pontos positivos e de insatisfação."
+                  },
+                  unknown: {
+                    emoji: "❔",
+                    color: "text-muted-foreground",
+                    bg: "bg-muted",
+                    border: "border-border",
+                    label: "Não Analisado",
+                    desc: "Sentimento ainda não analisado para esta conversa."
+                  }
+                };
+                const currentSentiment = conversation.sentiment || "unknown";
+                const config = SENTIMENT_CONFIG[currentSentiment] || SENTIMENT_CONFIG.unknown;
+                return (
+                  <div className="mt-3">
+                    <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium", config.bg, config.border, config.color)}>
+                      <span className="text-lg leading-none select-none">{config.emoji}</span>
+                      <span className="flex-1">{config.label}</span>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                      {config.desc}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Divider */}
           <div className="my-4 border-t border-border" />
