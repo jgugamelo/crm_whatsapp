@@ -243,14 +243,23 @@ export async function POST(request: Request) {
         conversationId = newConv.id
       }
 
-      // Extract media URL if present in WAHA payload
+      // Extract media URL if present in WAHA payload.
+      // We save it as a local proxy URL to route request via the CRM server
+      // and authenticate properly using the WAHA API Key.
       let mediaUrl: string | null = null
       if (hasMedia && payload.media) {
-        const filename = payload.media.filename
-        if (filename) {
-          mediaUrl = `${config.waha_url}/api/files/${filename}`
-        } else if (payload.media.url) {
-          mediaUrl = payload.media.url
+        let fileKey = ''
+        if (payload.media.url) {
+          const parts = payload.media.url.split('/api/files/')
+          if (parts.length > 1) {
+            fileKey = parts[1]
+          }
+        }
+        if (!fileKey && payload.media.filename) {
+          fileKey = `${config.waha_session}/${payload.media.filename}`
+        }
+        if (fileKey) {
+          mediaUrl = `/api/whatsapp/media/waha?file=${fileKey}`
         }
       }
 

@@ -48,6 +48,60 @@ export async function GET(
       )
     }
 
+    // WAHA PROXY LOGIC: Stream authenticated files from WAHA server
+    if (mediaId === 'waha') {
+      const { searchParams } = new URL(request.url)
+      const file = searchParams.get('file')
+      if (!file) {
+        return NextResponse.json(
+          { error: 'File parameter is required' },
+          { status: 400 }
+        )
+      }
+
+      // Fetch active waha config
+      const { data: wahaConfig, error: configError } = await supabase
+        .from('whatsapp_config')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('provider', 'waha')
+        .limit(1)
+        .maybeSingle()
+
+      if (configError || !wahaConfig) {
+        return NextResponse.json(
+          { error: 'WAHA not configured' },
+          { status: 400 }
+        )
+      }
+
+      const apiKey = wahaConfig.waha_api_key ? decrypt(wahaConfig.waha_api_key) : null
+      const headers: Record<string, string> = {}
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`
+      }
+
+      const fileUrl = `${wahaConfig.waha_url}/api/files/${file}`
+      const fileRes = await fetch(fileUrl, { headers })
+      if (!fileRes.ok) {
+        return NextResponse.json(
+          { error: 'Failed to fetch media from WAHA' },
+          { status: fileRes.status }
+        )
+      }
+
+      const buffer = await fileRes.arrayBuffer()
+      const contentType = fileRes.headers.get('Content-Type') || 'application/octet-stream'
+
+      return new Response(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=86400',
+        },
+      })
+    }
+
     // Fetch and decrypt WhatsApp config
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
