@@ -110,16 +110,36 @@ export async function POST(request: Request) {
       // 1. Find or create contact
       let contactId: string | null = null
       let avatarUrl: string | null = null
-      const { data: contact } = await db
+      const contactName = payload._data?.notifyName || payload._data?.pushname || payload.sender?.pushName || payload.sender?.name || rawPhone
+
+      const { data: contactsList, error: contactFetchError } = await db
         .from('contacts')
-        .select('id, avatar_url')
+        .select('id, avatar_url, name')
         .eq('account_id', accountId)
         .eq('phone', phone)
-        .maybeSingle()
+
+      if (contactFetchError) {
+        console.error('[waha/webhook] Error fetching contacts:', contactFetchError)
+      }
+
+      const contact = contactsList && contactsList.length > 0 ? contactsList[0] : null
 
       if (contact) {
         contactId = contact.id
         avatarUrl = contact.avatar_url
+
+        // If the contact name in the DB is just the raw phone (fallback) but we received a better notifyName, update it!
+        const isFallbackName = contact.name === rawPhone || contact.name === phone
+        if (contactName !== rawPhone && isFallbackName) {
+          try {
+            await db
+              .from('contacts')
+              .update({ name: contactName })
+              .eq('id', contactId)
+          } catch (e) {
+            console.error('[waha/webhook] Failed to update contact name:', e)
+          }
+        }
 
         // If the contact exists but has no avatar, try to fetch and save it
         if (!avatarUrl) {
@@ -160,7 +180,7 @@ export async function POST(request: Request) {
           .insert({
             account_id: accountId,
             phone,
-            name: rawPhone, // fallback name
+            name: contactName, // Save notifyName
             user_id: config.user_id, // link to session creator
             avatar_url: avatarUrl,
           })
@@ -176,12 +196,17 @@ export async function POST(request: Request) {
 
       // 2. Find or create conversation
       let conversationId: string | null = null
-      const { data: conversation } = await db
+      const { data: convsList, error: convFetchError } = await db
         .from('conversations')
         .select('id, unread_count, assigned_agent_id')
         .eq('account_id', accountId)
         .eq('contact_id', contactId!)
-        .maybeSingle()
+
+      if (convFetchError) {
+        console.error('[waha/webhook] Error fetching conversations:', convFetchError)
+      }
+
+      const conversation = convsList && convsList.length > 0 ? convsList[0] : null
 
       if (conversation) {
         conversationId = conversation.id
