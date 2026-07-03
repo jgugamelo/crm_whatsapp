@@ -45,7 +45,6 @@ export async function POST(request: Request) {
           .from('messages')
           .update({ status })
           .eq('message_id', messageId)
-          .eq('account_id', accountId)
 
         if (updateError) {
           console.error('[waha/webhook] Failed to update message status:', updateError)
@@ -101,7 +100,6 @@ export async function POST(request: Request) {
         .from('messages')
         .select('id')
         .eq('message_id', messageId)
-        .eq('account_id', accountId)
         .maybeSingle()
 
       if (existingMsg) {
@@ -184,10 +182,9 @@ export async function POST(request: Request) {
       const { error: msgInsertError } = await db
         .from('messages')
         .insert({
-          account_id: accountId,
           conversation_id: conversationId,
           message_id: messageId,
-          direction,
+          sender_type: fromMe ? 'agent' : 'customer',
           content_type: contentType,
           content_text: textBody || '',
           status: direction === 'inbound' ? 'read' : 'sent',
