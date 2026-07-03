@@ -242,12 +242,22 @@ export async function POST(request: Request) {
         }
       }
 
-      // Map WAHA message types to CRM content_type
+      // Map WAHA message types to CRM content_type.
+      // Use mimetype-based classification if media details are available,
+      // fallback to type-based mapping.
       let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' = 'text'
-      if (type === 'image' || type === 'sticker') contentType = 'image'
-      else if (type === 'video') contentType = 'video'
-      else if (type === 'audio' || type === 'ptt') contentType = 'audio'
-      else if (type === 'document') contentType = 'document'
+      if (hasMedia && payload.media) {
+        const mime = payload.media.mimetype || ''
+        if (mime.startsWith('image/')) contentType = 'image'
+        else if (mime.startsWith('video/')) contentType = 'video'
+        else if (mime.startsWith('audio/')) contentType = 'audio'
+        else contentType = 'document'
+      } else {
+        if (type === 'image' || type === 'sticker') contentType = 'image'
+        else if (type === 'video') contentType = 'video'
+        else if (type === 'audio' || type === 'ptt') contentType = 'audio'
+        else if (type === 'document') contentType = 'document'
+      }
 
       const messageDate = new Date(timestamp * 1000).toISOString()
 
