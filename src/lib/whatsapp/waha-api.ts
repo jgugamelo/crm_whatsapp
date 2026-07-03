@@ -166,3 +166,27 @@ export async function sendWahaMediaMessage(
     messageId: data.id || '',
   };
 }
+
+export async function getWahaProfilePicture(
+  config: WahaConfig,
+  phone: string
+): Promise<string | null> {
+  try {
+    const contactId = phone.includes('@') ? phone : `${phone.replace(/\D/g, '')}@c.us`;
+    const res = await wahaFetch(
+      config,
+      `/api/contacts/profile-picture?contactId=${encodeURIComponent(contactId)}&session=${encodeURIComponent(config.waha_session)}`
+    );
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const data = await res.json();
+    return data.profilePictureURL || null;
+  } catch (err) {
+    console.error('[waha-api] getWahaProfilePicture error:', err);
+    return null;
+  }
+}
+

@@ -109,16 +109,51 @@ export async function POST(request: Request) {
 
       // 1. Find or create contact
       let contactId: string | null = null
+      let avatarUrl: string | null = null
       const { data: contact } = await db
         .from('contacts')
-        .select('id')
+        .select('id, avatar_url')
         .eq('account_id', accountId)
         .eq('phone', phone)
         .maybeSingle()
 
       if (contact) {
         contactId = contact.id
+        avatarUrl = contact.avatar_url
+
+        // If the contact exists but has no avatar, try to fetch and save it
+        if (!avatarUrl) {
+          try {
+            const { getWahaProfilePicture } = await import('@/lib/whatsapp/waha-api')
+            avatarUrl = await getWahaProfilePicture({
+              waha_url: config.waha_url,
+              waha_session: config.waha_session,
+              waha_api_key: config.waha_api_key,
+            }, phone)
+
+            if (avatarUrl) {
+              await db
+                .from('contacts')
+                .update({ avatar_url: avatarUrl })
+                .eq('id', contactId)
+            }
+          } catch (e) {
+            console.error('[waha/webhook] Failed to update avatar for existing contact:', e)
+          }
+        }
       } else {
+        // Fetch avatar url from WAHA
+        try {
+          const { getWahaProfilePicture } = await import('@/lib/whatsapp/waha-api')
+          avatarUrl = await getWahaProfilePicture({
+            waha_url: config.waha_url,
+            waha_session: config.waha_session,
+            waha_api_key: config.waha_api_key,
+          }, phone)
+        } catch (e) {
+          console.error('[waha/webhook] Failed to fetch avatar for new contact:', e)
+        }
+
         // Create new contact
         const { data: newContact, error: contactCreateError } = await db
           .from('contacts')
@@ -127,6 +162,7 @@ export async function POST(request: Request) {
             phone,
             name: rawPhone, // fallback name
             user_id: config.user_id, // link to session creator
+            avatar_url: avatarUrl,
           })
           .select('id')
           .single()
