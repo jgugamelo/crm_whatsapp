@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       // Determine the contact phone number
       // Inbound: from JID (e.g. 5511999999999@c.us)
       // Outbound: to JID
-      const rawPhone = participantJid.split('@')[0]
+      const rawPhone = participantJid.split('@')[0].split(':')[0].split('.')[0]
       const phone = `+${rawPhone}` // Normalize to E.164 format with + prefix
 
       const direction = fromMe ? 'outbound' : 'inbound'
