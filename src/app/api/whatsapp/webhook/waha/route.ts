@@ -85,15 +85,15 @@ export async function POST(request: Request) {
 
       const direction = fromMe ? 'outbound' : 'inbound'
 
-      // Ignore status broadcast updates (WhatsApp Stories) and group messages
+      // Ignore status broadcast updates (WhatsApp Stories), group messages, and channels/newsletters
       if (
         from === 'status@broadcast' || 
         to === 'status@broadcast' ||
-        (from && from.endsWith('@g.us')) ||
-        (to && to.endsWith('@g.us')) ||
-        (chatId && chatId.endsWith('@g.us'))
+        (from && (from.endsWith('@g.us') || from.endsWith('@newsletter'))) ||
+        (to && (to.endsWith('@g.us') || to.endsWith('@newsletter'))) ||
+        (chatId && (chatId.endsWith('@g.us') || chatId.endsWith('@newsletter')))
       ) {
-        return NextResponse.json({ success: true, message: 'Ignored group or status broadcast update' })
+        return NextResponse.json({ success: true, message: 'Ignored group, status broadcast or newsletter' })
       }
       
       // Check if message already exists in DB to prevent duplicates
