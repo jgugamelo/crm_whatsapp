@@ -110,7 +110,19 @@ export async function POST(request: Request) {
       // 1. Find or create contact
       let contactId: string | null = null
       let avatarUrl: string | null = null
-      const contactName = payload._data?.notifyName || payload._data?.pushname || payload.sender?.pushName || payload.sender?.name || rawPhone
+      let contactName = 
+        payload.sender?.name || 
+        payload._data?.Info?.PushName || 
+        payload.pushName || 
+        payload.pushname ||
+        payload._data?.notifyName || 
+        payload._data?.pushname || 
+        payload.sender?.pushName || 
+        rawPhone
+
+      if (contactName && contactName.trim() === '.') {
+        contactName = rawPhone
+      }
 
       const { data: contactsList, error: contactFetchError } = await db
         .from('contacts')
