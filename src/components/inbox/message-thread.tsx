@@ -106,6 +106,7 @@ interface MessageThreadProps {
    */
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
+  whatsappProvider?: string;
 }
 
 function formatDateSeparator(dateStr: string): string {
@@ -164,6 +165,7 @@ export function MessageThread({
   onRefresh,
   contactPanelOpen,
   onToggleContactPanel,
+  whatsappProvider = "meta",
 }: MessageThreadProps) {
   const { user } = useAuth();
   const { getPresence, getRow, now } = usePresence();
@@ -222,6 +224,11 @@ export function MessageThread({
   // 24-hour session timer
   const sessionInfo = useMemo(() => {
     if (!messages.length) return { expired: false, remaining: "" };
+
+    // If the provider is waha, the session never expires
+    if (whatsappProvider === "waha") {
+      return { expired: false, remaining: "" };
+    }
 
     // Find last customer message
     const lastCustomerMsg = [...messages]

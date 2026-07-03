@@ -34,6 +34,7 @@ export default function InboxPage() {
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(
     null
   );
+  const [whatsappProvider, setWhatsappProvider] = useState<string>("meta");
   /**
    * Bumped whenever we want children (ConversationList, MessageThread)
    * to refetch from the DB — used as a safety net against missed
@@ -163,6 +164,9 @@ export default function InboxPage() {
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data = await res.json();
         setWhatsappConnected(data?.connected === true);
+        if (data?.provider) {
+          setWhatsappProvider(data.provider);
+        }
       } catch (err) {
         console.error("[Inbox] failed to check connection status:", err);
         setWhatsappConnected(false);
@@ -573,6 +577,7 @@ export default function InboxPage() {
             conversation={activeConversation}
             contact={activeContact}
             messages={messages}
+            whatsappProvider={whatsappProvider}
             onMessagesLoaded={handleMessagesLoaded}
             onNewMessage={handleNewMessage}
             onUpdateMessage={handleUpdateMessage}
