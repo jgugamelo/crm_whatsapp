@@ -26,9 +26,12 @@ import {
   RefreshCw,
   PanelRightOpen,
   PanelRightClose,
+  Phone,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { useVoipCall } from "@/hooks/use-voip-call";
+import { VoipCallOverlay } from "@/components/inbox/voip-call-overlay";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -168,6 +171,30 @@ export function MessageThread({
   whatsappProvider = "meta",
 }: MessageThreadProps) {
   const { user } = useAuth();
+  const [voipSession, setVoipSession] = useState<string>("default");
+
+  useEffect(() => {
+    // Fetch the active session name for VoIP routing
+    fetch("/api/whatsapp/config")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.waha_session) {
+          setVoipSession(data.waha_session);
+        }
+      })
+      .catch((err) => console.warn("VoIP config fetch failed, using default:", err));
+  }, []);
+
+  const {
+    activeCall,
+    incomingCall,
+    audioStream,
+    startOutboundCall,
+    acceptInboundCall,
+    rejectInboundCall,
+    endActiveCall,
+  } = useVoipCall(voipSession);
+
   const { getPresence, getRow, now } = usePresence();
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -922,6 +949,19 @@ export function MessageThread({
               when realtime missed an event or the agent just wants to be
               sure nothing's stale. Only rendered when the parent wires
               up `onRefresh`. */}
+          {/* WhatsApp WebRTC VoIP Call Button */}
+          {whatsappProvider === "waha" && contact?.phone && (
+            <button
+              type="button"
+              onClick={() => startOutboundCall(contact.phone)}
+              aria-label="Iniciar chamada de voz"
+              title="Ligar pelo WhatsApp"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400"
+            >
+              <Phone className="h-4 w-4" />
+            </button>
+          )}
+
           {onRefresh && (
             <button
               type="button"
@@ -1119,6 +1159,17 @@ export function MessageThread({
         open={templateModalOpen}
         onOpenChange={setTemplateModalOpen}
         onSelect={handleSendTemplate}
+      />
+
+      {/* Real-time VoIP Call Popup Overlay */}
+      <VoipCallOverlay
+        activeCall={activeCall}
+        incomingCall={incomingCall}
+        audioStream={audioStream}
+        contactName={displayName}
+        onAccept={acceptInboundCall}
+        onReject={rejectInboundCall}
+        onHangup={endActiveCall}
       />
     </div>
   );

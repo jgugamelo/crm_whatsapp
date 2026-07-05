@@ -123,6 +123,18 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/calls/events",
+        destination: "http://localhost:8080/api/events",
+      },
+      {
+        source: "/api/calls/:path*",
+        destination: "http://localhost:8080/api/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
