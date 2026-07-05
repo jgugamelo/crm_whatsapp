@@ -178,7 +178,9 @@ export function MessageThread({
     fetch("/api/whatsapp/config")
       .then((res) => res.json())
       .then((data) => {
-        if (data && data.waha_session) {
+        if (data && data.provider === "waha" && data.phone_info?.id) {
+          setVoipSession(data.phone_info.id);
+        } else if (data && data.waha_session) {
           setVoipSession(data.waha_session);
         }
       })
