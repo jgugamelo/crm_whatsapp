@@ -487,14 +487,20 @@ export async function POST(request: Request) {
       )
     }
 
-    // Update conversation
+    // Update conversation (and auto-assign to the replying agent if unassigned)
+    const convUpdate: Record<string, any> = {
+      last_message_text: content_text || `[${message_type}]`,
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    if (!(conversation as any).assigned_agent_id) {
+      convUpdate.assigned_agent_id = user.id
+    }
+
     await supabase
       .from('conversations')
-      .update({
-        last_message_text: content_text || `[${message_type}]`,
-        last_message_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .update(convUpdate)
       .eq('id', conversation_id)
 
     // Pause any active Flow run for this contact — the agent stepping

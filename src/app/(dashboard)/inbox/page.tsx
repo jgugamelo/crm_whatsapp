@@ -271,8 +271,24 @@ export default function InboxPage() {
           // back on for the ~100ms it takes for the reset effect's server
           // UPDATE to round-trip. Non-active convs take the value as-is.
           const isActive = activeConversation?.id === conv.id;
-          setConversations((prev) =>
-            prev.map((c) =>
+          setConversations((prev) => {
+            const currentConv = prev.find((c) => c.id === conv.id);
+            if (currentConv && conv.sentiment && conv.sentiment !== currentConv.sentiment) {
+              const contactName = currentConv.contact?.name || "Cliente";
+              if (conv.sentiment === "negative") {
+                toast.error(`Alerta de humor: "${contactName}" está insatisfeito(a) 😡`, {
+                  description: "O sentimento da conversa mudou para Negativo. Atenção recomendada.",
+                  duration: 6000,
+                });
+              } else if (conv.sentiment === "positive") {
+                toast.success(`Ótimo: "${contactName}" está satisfeito(a) 😊`, {
+                  description: "O sentimento da conversa mudou para Positivo.",
+                  duration: 4000,
+                });
+              }
+            }
+
+            return prev.map((c) =>
               c.id === conv.id
                 ? {
                     ...c,
@@ -280,8 +296,8 @@ export default function InboxPage() {
                     unread_count: isActive ? 0 : conv.unread_count,
                   }
                 : c,
-            ),
-          );
+            );
+          });
         } else {
           // UPDATE arrived before the INSERT (or after a missed INSERT)
           // — fetch the row so it surfaces with its contact joined. The
