@@ -73,6 +73,11 @@ export function WhatsAppConfig() {
   const [qrTrigger, setQrTrigger] = useState(0);
   const [wahaConnecting, setWahaConnecting] = useState(false);
 
+  // VoIP States
+  const [voipStatus, setVoipStatus] = useState<string>('NOT_CREATED');
+  const [voipQr, setVoipQr] = useState<string>('');
+  const [voipLoading, setVoipLoading] = useState(false);
+
   // Meta specific checks
   const isRegistered = Boolean(config?.registered_at);
   const lastRegistrationError = config?.last_registration_error ?? null;
@@ -235,6 +240,92 @@ export function WhatsAppConfig() {
       fetchConfig(accountId);
     }
   }, [authLoading, profileLoading, user, accountId, fetchConfig]);
+
+  // VoIP Live Status and Pairing Event Listener
+  useEffect(() => {
+    if (provider !== 'waha' || !wahaSession) return;
+
+    let active = true;
+    let es: EventSource | null = null;
+
+    const checkVoipSession = async () => {
+      try {
+        const res = await fetch('/api/calls/sessions');
+        if (!res.ok) return;
+        const data = await res.json();
+        const existing = data.sessions?.find((s: any) => s.id === wahaSession);
+        if (existing) {
+          if (active) {
+            setVoipStatus(existing.state);
+            if (existing.qr) setVoipQr(existing.qr);
+          }
+        } else {
+          if (active) setVoipStatus('NOT_CREATED');
+        }
+      } catch (err) {
+        console.warn("Failed to fetch VoIP sessions:", err);
+      }
+    };
+
+    checkVoipSession();
+
+    // Check status every 7 seconds
+    const interval = setInterval(checkVoipSession, 7000);
+
+    // Live Event Stream for QR and Auth status
+    try {
+      const clientId = 'config-' + Math.random().toString(36).substring(2);
+      es = new EventSource(`/api/calls/events?clientId=${encodeURIComponent(clientId)}`);
+      es.onmessage = (ev) => {
+        try {
+          const event = JSON.parse(ev.data);
+          if (event.sessionId !== wahaSession) return;
+
+          if (event.type === 'auth-state') {
+            if (active) {
+              setVoipStatus(event.state);
+              if (event.qr) setVoipQr(event.qr);
+            }
+          } else if (event.type === 'session-qr') {
+            if (active) {
+              setVoipStatus('SCAN_QR');
+              setVoipQr(event.qr);
+            }
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      es?.close();
+    };
+  }, [provider, wahaSession]);
+
+  const handleCreateVoipSession = async () => {
+    if (!wahaSession) return;
+    setVoipLoading(true);
+    try {
+      const createRes = await fetch('/api/calls/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: wahaSession }),
+      });
+      if (!createRes.ok) throw new Error('Falha ao criar sessão de VoIP');
+
+      await fetch(`/api/calls/sessions/${wahaSession}/pair`, {
+        method: 'POST',
+      });
+
+      setVoipStatus('SCAN_QR');
+      toast.success('Sessão de VoIP criada. Aguardando pareamento...');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao inicializar ligações');
+    } finally {
+      setVoipLoading(false);
+    }
+  };
 
   // WAHA session actions
   async function handleWahaStart() {
@@ -605,6 +696,72 @@ export function WhatsAppConfig() {
                       <h5 className="text-sm font-semibold text-amber-200">Scan QR Code</h5>
                       <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
                         Scan this QR code using WhatsApp on your phone (Linked Devices &gt; Link a Device) to authorize the session.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Connection Status & QR Code (VoIP calling) */}
+          {provider === 'waha' && config && (
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  Ligações de Voz (WhatsApp VoIP)
+                </CardTitle>
+                <CardDescription className="text-muted-foreground font-light">
+                  Gerencie as ligações de voz integradas por WebRTC.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between border border-border rounded-lg p-3 bg-muted/40">
+                  <div className="flex items-center gap-3">
+                    <span className="relative flex h-3 w-3">
+                      <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                        voipStatus === 'working' ? 'bg-emerald-500 animate-pulse' :
+                        voipStatus === 'SCAN_QR' ? 'bg-amber-500' : 'bg-red-500'
+                      }`}></span>
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">Status do VoIP</h4>
+                      <p className="text-xs text-muted-foreground capitalize">
+                        {voipStatus === 'working' ? 'Ativo e Conectado' : 
+                         voipStatus === 'SCAN_QR' ? 'Aguardando QR Code' : 
+                         voipStatus === 'NOT_CREATED' ? 'Desativado' : voipStatus}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {voipStatus === 'NOT_CREATED' && (
+                      <Button
+                        size="sm"
+                        disabled={voipLoading || !wahaSession}
+                        onClick={handleCreateVoipSession}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        {voipLoading ? 'Ativando...' : 'Ativar Ligações'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* VoIP QR Code Container */}
+                {voipStatus === 'SCAN_QR' && voipQr && (
+                  <div className="flex flex-col items-center justify-center p-6 border border-amber-600/30 bg-amber-950/10 rounded-lg space-y-3">
+                    <div className="bg-white p-3 rounded-md">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(voipQr)}`}
+                        alt="WhatsApp VoIP QR Code"
+                        className="w-48 h-48"
+                      />
+                    </div>
+                    <div className="text-center">
+                      <h5 className="text-sm font-semibold text-amber-200">Escanear QR Code de Ligações</h5>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
+                        Escaneie este QR code usando seu celular no WhatsApp (Aparelhos Conectados) para permitir ligações no CRM.
                       </p>
                     </div>
                   </div>
