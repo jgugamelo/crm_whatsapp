@@ -9,9 +9,8 @@ export interface MetricDelta {
 
 export interface MetricsBundle {
   activeConversations: MetricDelta
-  newContactsToday: MetricDelta
-  openDealsValue: number
-  openDealsCount: number
+  pendingConversations: MetricDelta
+  resolvedConversationsToday: MetricDelta
   messagesSentToday: MetricDelta
 }
 
@@ -21,17 +20,16 @@ export interface ConversationsSeriesPoint {
   outgoing: number
 }
 
-export interface PipelineStageSlice {
-  id: string
-  name: string
+export interface ConversationsStatusSlice {
+  status: string
+  label: string
   color: string
-  dealCount: number
-  totalValue: number
+  count: number
 }
 
-export interface PipelineDonutData {
-  stages: PipelineStageSlice[]
-  totalValue: number
+export interface ConversationsStatusData {
+  slices: ConversationsStatusSlice[]
+  totalCount: number
 }
 
 export interface ResponseTimeBucket {
@@ -64,4 +62,17 @@ export interface ActivityItem {
   at: string
   /** Optional deep-link for the whole row (not all items have a target). */
   href?: string
+}
+
+export interface PipelineStageSlice {
+  id: string
+  name: string
+  color: string
+  dealCount: number
+  totalValue: number
+}
+
+export interface PipelineDonutData {
+  stages: PipelineStageSlice[]
+  totalValue: number
 }

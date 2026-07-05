@@ -11,8 +11,8 @@ import type {
   ActivityItem,
   ConversationsSeriesPoint,
   MetricsBundle,
-  PipelineDonutData,
-  PipelineStageSlice,
+  ConversationsStatusData,
+  ConversationsStatusSlice,
   ResponseTimeBucket,
   ResponseTimeSummary,
 } from './types'
@@ -37,9 +37,11 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
     openConvCur,
     newConvToday,
     newConvYesterday,
-    newContactsToday,
-    newContactsYesterday,
-    openDeals,
+    pendingConvCur,
+    newPendingToday,
+    newPendingYesterday,
+    resolvedToday,
+    resolvedYesterday,
     messagesToday,
     messagesYesterday,
   ] = await Promise.all([
@@ -55,13 +57,29 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
       .eq('status', 'open')
       .gte('created_at', yesterdayStart)
       .lt('created_at', todayStart),
-    db.from('contacts').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
+    db.from('conversations').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     db
-      .from('contacts')
+      .from('conversations')
       .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .gte('created_at', todayStart),
+    db
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
       .gte('created_at', yesterdayStart)
       .lt('created_at', todayStart),
-    db.from('deals').select('value, status').eq('status', 'open'),
+    db
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'closed')
+      .gte('updated_at', todayStart),
+    db
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'closed')
+      .gte('updated_at', yesterdayStart)
+      .lt('updated_at', todayStart),
     db
       .from('messages')
       .select('id', { count: 'exact', head: true })
@@ -75,23 +93,19 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
       .lt('created_at', todayStart),
   ])
 
-  const openDealsRows = (openDeals.data ?? []) as { value: number | null }[]
-  const openDealsValue = openDealsRows.reduce((sum, d) => sum + (d.value ?? 0), 0)
-
   return {
     activeConversations: {
       current: openConvCur.count ?? 0,
-      // "vs yesterday" on a current-state count has no clean answer
-      // without snapshots — we show the delta in NEW open conversations
-      // today vs yesterday. That's the business-meaningful daily signal.
       previous: (newConvToday.count ?? 0) - (newConvYesterday.count ?? 0),
     },
-    newContactsToday: {
-      current: newContactsToday.count ?? 0,
-      previous: newContactsYesterday.count ?? 0,
+    pendingConversations: {
+      current: pendingConvCur.count ?? 0,
+      previous: (newPendingToday.count ?? 0) - (newPendingYesterday.count ?? 0),
     },
-    openDealsValue,
-    openDealsCount: openDealsRows.length,
+    resolvedConversationsToday: {
+      current: resolvedToday.count ?? 0,
+      previous: resolvedYesterday.count ?? 0,
+    },
     messagesSentToday: {
       current: messagesToday.count ?? 0,
       previous: messagesYesterday.count ?? 0,
@@ -130,40 +144,26 @@ export async function loadConversationsSeries(
 
 // --- 3. Pipeline donut -------------------------------------------------
 
-export async function loadPipelineDonut(db: DB): Promise<PipelineDonutData> {
-  const [stagesRes, dealsRes] = await Promise.all([
-    db.from('pipeline_stages').select('id, name, color, pipeline_id, position').order('position'),
-    db.from('deals').select('stage_id, value, status').eq('status', 'open'),
-  ])
+export async function loadConversationsStatusDonut(db: DB): Promise<ConversationsStatusData> {
+  const { data, error } = await db.from('conversations').select('status')
+  if (error) throw error
 
-  const stages =
-    (stagesRes.data ?? []) as { id: string; name: string; color: string }[]
-  const deals = (dealsRes.data ?? []) as { stage_id: string; value: number | null }[]
-
-  const byStage = new Map<string, { count: number; total: number }>()
-  for (const d of deals) {
-    const row = byStage.get(d.stage_id) ?? { count: 0, total: 0 }
-    row.count += 1
-    row.total += d.value ?? 0
-    byStage.set(d.stage_id, row)
+  const counts = { open: 0, pending: 0, closed: 0 }
+  for (const row of (data ?? []) as { status: string }[]) {
+    if (row.status === 'open') counts.open += 1
+    else if (row.status === 'pending') counts.pending += 1
+    else if (row.status === 'closed') counts.closed += 1
   }
 
-  const slices: PipelineStageSlice[] = stages
-    .map((s) => ({
-      id: s.id,
-      name: s.name,
-      color: s.color || '#64748b',
-      dealCount: byStage.get(s.id)?.count ?? 0,
-      totalValue: byStage.get(s.id)?.total ?? 0,
-    }))
-    // Hide empty stages from the ring (but we'd still show them in the
-    // legend if the user wanted a full breakdown — trimming keeps the
-    // visual clean for the common case).
-    .filter((s) => s.totalValue > 0 || s.dealCount > 0)
+  const slices: ConversationsStatusSlice[] = [
+    { status: 'open', label: 'Em Atendimento (Abertas)', color: '#3b82f6', count: counts.open },
+    { status: 'pending', label: 'Aguardando Resposta (Pendentes)', color: '#f59e0b', count: counts.pending },
+    { status: 'closed', label: 'Resolvidas (Fechadas)', color: '#10b981', count: counts.closed },
+  ]
 
   return {
-    stages: slices,
-    totalValue: slices.reduce((sum, s) => sum + s.totalValue, 0),
+    slices,
+    totalCount: data?.length ?? 0,
   }
 }
 
