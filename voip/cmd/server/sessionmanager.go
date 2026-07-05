@@ -120,9 +120,13 @@ func (m *SessionManager) Restore(ctx context.Context) error {
 }
 
 func (m *SessionManager) Create(name string) (string, error) {
-	id := newSessionID()
+	id := name // Use name directly as the unique ID
 	if err := m.store.insert(m.appCtx, id, name); err != nil {
-		return "", err
+		// If the session already exists, register it and return successfully
+		if s, ok := m.Get(id); ok {
+			return s.id, nil
+		}
+		// If it exists in store but not loaded in manager, we proceed to register it
 	}
 	device := m.container.NewDevice()
 	client := whatsmeow.NewClient(device, m.waLogger)
