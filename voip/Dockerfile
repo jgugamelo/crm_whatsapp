@@ -10,6 +10,9 @@ RUN go mod download
 # Copy the rest of the source code
 COPY . .
 
+# Run go mod tidy to resolve dependencies
+RUN go mod tidy
+
 # Build the Go application from cmd/server
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o voip-server ./cmd/server
 
