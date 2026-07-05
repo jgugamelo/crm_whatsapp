@@ -244,8 +244,8 @@ export async function POST(request: Request) {
       }
 
       // Extract media URL if present in WAHA payload.
-      // We save it as a local proxy URL to route request via the CRM server
-      // and authenticate properly using the WAHA API Key.
+      // We download the media from WAHA and upload it permanently to Supabase Storage (chat-media bucket)
+      // to prevent files disappearing when the WAHA server cache is restarted or cleared.
       let mediaUrl: string | null = null
       if (hasMedia && payload.media) {
         let fileKey = ''
@@ -259,7 +259,47 @@ export async function POST(request: Request) {
           fileKey = `${config.waha_session}/${payload.media.filename}`
         }
         if (fileKey) {
-          mediaUrl = `/api/whatsapp/media/waha?file=${fileKey}`
+          try {
+            const { decrypt } = await import('@/lib/whatsapp/encryption')
+            const apiKey = config.waha_api_key ? decrypt(config.waha_api_key) : null
+            const headers: Record<string, string> = {}
+            if (apiKey) {
+              headers['Authorization'] = `Bearer ${apiKey}`
+            }
+
+            const fileUrl = `${config.waha_url}/api/files/${fileKey}`
+            const fileRes = await fetch(fileUrl, { headers })
+            if (fileRes.ok) {
+              const buffer = await fileRes.arrayBuffer()
+              const contentType = fileRes.headers.get('Content-Type') || payload.media.mimetype || 'application/octet-stream'
+              
+              // Build file name and upload to account-scoped path in chat-media bucket
+              const filename = fileKey.split('/').pop() || 'file'
+              const storagePath = `account-${accountId}/${Date.now()}-${filename}`
+              
+              const { error: uploadError } = await db.storage
+                .from('chat-media')
+                .upload(storagePath, new Uint8Array(buffer), {
+                  contentType,
+                  cacheControl: '31536000',
+                  upsert: true,
+                })
+
+              if (!uploadError) {
+                const { data } = db.storage.from('chat-media').getPublicUrl(storagePath)
+                mediaUrl = data.publicUrl
+              } else {
+                console.error('[waha/webhook] Supabase Storage upload failed:', uploadError.message)
+                mediaUrl = `/api/whatsapp/media/waha?file=${fileKey}`
+              }
+            } else {
+              console.error('[waha/webhook] Failed to download media from WAHA, status:', fileRes.status)
+              mediaUrl = `/api/whatsapp/media/waha?file=${fileKey}`
+            }
+          } catch (err) {
+            console.error('[waha/webhook] Media upload error:', err)
+            mediaUrl = `/api/whatsapp/media/waha?file=${fileKey}`
+          }
         }
       }
 
