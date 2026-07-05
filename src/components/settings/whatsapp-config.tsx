@@ -736,21 +736,22 @@ export function WhatsAppConfig() {
                   <div className="flex items-center gap-3">
                     <span className="relative flex h-3 w-3">
                       <span className={`relative inline-flex rounded-full h-3 w-3 ${
-                        voipStatus === 'working' ? 'bg-emerald-500 animate-pulse' :
-                        voipStatus === 'SCAN_QR' ? 'bg-amber-500' : 'bg-red-500'
+                        voipStatus === 'open' ? 'bg-emerald-500 animate-pulse' :
+                        voipStatus === 'qr' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'
                       }`}></span>
                     </span>
                     <div>
                       <h4 className="text-sm font-semibold text-foreground">Status do VoIP</h4>
                       <p className="text-xs text-muted-foreground capitalize">
-                        {voipStatus === 'working' ? 'Ativo e Conectado' : 
-                         voipStatus === 'SCAN_QR' ? 'Aguardando QR Code' : 
+                        {voipStatus === 'open' ? 'Ativo e Conectado' : 
+                         voipStatus === 'qr' ? 'Aguardando QR Code' : 
+                         voipStatus === 'connecting' ? 'Conectando...' :
                          voipStatus === 'NOT_CREATED' ? 'Desativado' : voipStatus}
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {voipStatus === 'NOT_CREATED' && (
+                    {(voipStatus === 'NOT_CREATED' || voipStatus === 'logged_out') && (
                       <Button
                         size="sm"
                         disabled={voipLoading || !wahaSession}
@@ -764,7 +765,7 @@ export function WhatsAppConfig() {
                 </div>
 
                 {/* VoIP QR Code Container */}
-                {voipStatus === 'SCAN_QR' && voipQr && (
+                {voipStatus === 'qr' && voipQr && (
                   <div className="flex flex-col items-center justify-center p-6 border border-amber-600/30 bg-amber-950/10 rounded-lg space-y-3">
                     <div className="bg-white p-3 rounded-md">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
