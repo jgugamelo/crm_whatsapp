@@ -14,10 +14,21 @@ export type CallInfo = {
 };
 
 export function useVoipCall(sessionName: string) {
+  const [voipBaseUrl, setVoipBaseUrl] = useState<string>("");
   const [activeCall, setActiveCall] = useState<CallInfo | null>(null);
   const [incomingCall, setIncomingCall] = useState<CallInfo | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const openConnRef = useRef<OpenCall | null>(null);
+
+  // Fetch VoIP Base URL Config
+  useEffect(() => {
+    fetch("/api/whatsapp/voip-url")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.url) setVoipBaseUrl(data.url);
+      })
+      .catch((err) => console.warn("Failed to fetch VoIP URL in hook:", err));
+  }, []);
 
   // Initialize event stream connection
   useEffect(() => {
@@ -91,16 +102,16 @@ export function useVoipCall(sessionName: string) {
   }, [sessionName, activeCall, incomingCall]);
 
   const startOutboundCall = useCallback(async (phone: string) => {
-    if (!sessionName) {
-      toast.error("WhatsApp VoIP não configurado.");
+    if (!sessionName || !voipBaseUrl) {
+      toast.error("WhatsApp VoIP não configurado ou offline.");
       return;
     }
 
     try {
       toast.info(`Iniciando chamada para ${phone}...`);
       
-      // Start call signaling via Go server
-      const res = await fetch(`/api/calls/sessions/${sessionName}/calls`, {
+      // Start call signaling via Go server (Direct CORS)
+      const res = await fetch(`${voipBaseUrl}/api/sessions/${sessionName}/calls`, {
         method: "POST",
         headers: {
           "X-Client-Id": getClientId(),
@@ -120,8 +131,8 @@ export function useVoipCall(sessionName: string) {
 
       const { call } = await res.json();
       
-      // Open WebRTC channel
-      const conn = await openCall(sessionName, call.callId, null);
+      // Open WebRTC channel (Direct CORS)
+      const conn = await openCall(voipBaseUrl, sessionName, call.callId, null);
       openConnRef.current = conn;
 
       if (conn.remoteStream) {
@@ -140,14 +151,14 @@ export function useVoipCall(sessionName: string) {
       console.error("[VoIP] Start call failed:", err);
       toast.error(`Falha ao iniciar ligação: ${err.message}`);
     }
-  }, [sessionName]);
+  }, [sessionName, voipBaseUrl]);
 
   const acceptInboundCall = useCallback(async () => {
-    if (!incomingCall) return;
+    if (!incomingCall || !voipBaseUrl) return;
 
     try {
-      // Accept signaling
-      const res = await fetch(`/api/calls/sessions/${incomingCall.sessionId}/calls/${incomingCall.callId}/accept`, {
+      // Accept signaling (Direct CORS)
+      const res = await fetch(`${voipBaseUrl}/api/sessions/${incomingCall.sessionId}/calls/${incomingCall.callId}/accept`, {
         method: "POST",
         headers: {
           "X-Client-Id": getClientId(),
@@ -158,8 +169,8 @@ export function useVoipCall(sessionName: string) {
 
       if (!res.ok) throw new Error(`Falha ao aceitar: HTTP ${res.status}`);
 
-      // Open WebRTC connection
-      const conn = await openCall(incomingCall.sessionId, incomingCall.callId, null);
+      // Open WebRTC connection (Direct CORS)
+      const conn = await openCall(voipBaseUrl, incomingCall.sessionId, incomingCall.callId, null);
       openConnRef.current = conn;
 
       if (conn.remoteStream) {
@@ -175,13 +186,14 @@ export function useVoipCall(sessionName: string) {
       console.error("[VoIP] Accept call failed:", err);
       toast.error(err.message);
     }
-  }, [incomingCall]);
+  }, [incomingCall, voipBaseUrl]);
 
   const rejectInboundCall = useCallback(async () => {
-    if (!incomingCall) return;
+    if (!incomingCall || !voipBaseUrl) return;
 
     try {
-      await fetch(`/api/calls/sessions/${incomingCall.sessionId}/calls/${incomingCall.callId}/reject`, {
+      // Reject signaling (Direct CORS)
+      await fetch(`${voipBaseUrl}/api/sessions/${incomingCall.sessionId}/calls/${incomingCall.callId}/reject`, {
         method: "POST",
         headers: {
           "X-Client-Id": getClientId(),
@@ -193,13 +205,14 @@ export function useVoipCall(sessionName: string) {
     } catch (err: any) {
       console.error("[VoIP] Reject call failed:", err);
     }
-  }, [incomingCall]);
+  }, [incomingCall, voipBaseUrl]);
 
   const endActiveCall = useCallback(async () => {
-    if (!activeCall) return;
+    if (!activeCall || !voipBaseUrl) return;
 
     try {
-      await fetch(`/api/calls/sessions/${activeCall.sessionId}/calls/${activeCall.callId}`, {
+      // End call (Direct CORS)
+      await fetch(`${voipBaseUrl}/api/sessions/${activeCall.sessionId}/calls/${activeCall.callId}`, {
         method: "DELETE",
         headers: {
           "X-Client-Id": getClientId(),
@@ -215,7 +228,7 @@ export function useVoipCall(sessionName: string) {
     } catch (err: any) {
       console.error("[VoIP] End call failed:", err);
     }
-  }, [activeCall]);
+  }, [activeCall, voipBaseUrl]);
 
   return {
     activeCall,

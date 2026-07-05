@@ -36,10 +36,22 @@ class EventStream {
   #es: EventSource | null = null;
   #listeners = new Set<Listener>();
 
-  connect(): void {
+  async connect(): Promise<void> {
     if (typeof window === "undefined" || this.#es) return;
     const clientId = getClientId();
-    this.#es = new EventSource(`/api/calls/events?clientId=${encodeURIComponent(clientId)}`);
+
+    let baseUrl = "";
+    try {
+      const res = await fetch("/api/whatsapp/voip-url");
+      const data = await res.json();
+      baseUrl = data.url || "";
+    } catch (err) {
+      console.warn("[VoIP SSE] Failed to resolve VoIP URL, using fallback:", err);
+    }
+
+    if (this.#es) return; // prevent race condition
+
+    this.#es = new EventSource(`${baseUrl}/api/events?clientId=${encodeURIComponent(clientId)}`);
     this.#es.onmessage = (ev) => {
       try {
         const parsed: BrokerEvent = JSON.parse(ev.data);

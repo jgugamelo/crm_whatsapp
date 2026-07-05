@@ -69,6 +69,7 @@ const apiPost = async <T>(path: string, body: unknown): Promise<T> => {
 };
 
 export const openCall = async (
+  voipBaseUrl: string,
   sid: string,
   callId: string,
   micDeviceId: string | null,
@@ -113,7 +114,7 @@ export const openCall = async (
   });
 
   const { sdp_answer } = await apiPost<{ sdp_answer: string }>(
-    `/api/calls/sessions/${sid}/calls/${callId}/webrtc`,
+    `${voipBaseUrl}/api/sessions/${sid}/calls/${callId}/webrtc`,
     { sdp_offer: pc.localDescription!.sdp },
   );
   await pc.setRemoteDescription({ type: "answer", sdp: sdp_answer });

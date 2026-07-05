@@ -74,6 +74,7 @@ export function WhatsAppConfig() {
   const [wahaConnecting, setWahaConnecting] = useState(false);
 
   // VoIP States
+  const [voipBaseUrl, setVoipBaseUrl] = useState<string>('');
   const [voipStatus, setVoipStatus] = useState<string>('NOT_CREATED');
   const [voipQr, setVoipQr] = useState<string>('');
   const [voipLoading, setVoipLoading] = useState(false);
@@ -241,16 +242,28 @@ export function WhatsAppConfig() {
     }
   }, [authLoading, profileLoading, user, accountId, fetchConfig]);
 
-  // VoIP Live Status and Pairing Event Listener
+  // Fetch VoIP Base URL Config
   useEffect(() => {
-    if (provider !== 'waha' || !wahaSession) return;
+    fetch('/api/whatsapp/voip-url')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.url) {
+          setVoipBaseUrl(data.url);
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch VoIP URL:", err));
+  }, []);
+
+  // VoIP Live Status and Pairing Event Listener (Direct CORS Call)
+  useEffect(() => {
+    if (provider !== 'waha' || !wahaSession || !voipBaseUrl) return;
 
     let active = true;
     let es: EventSource | null = null;
 
     const checkVoipSession = async () => {
       try {
-        const res = await fetch('/api/calls/sessions');
+        const res = await fetch(`${voipBaseUrl}/api/sessions`);
         if (!res.ok) return;
         const data = await res.json();
         const existing = data.sessions?.find((s: any) => s.id === wahaSession);
@@ -269,13 +282,13 @@ export function WhatsAppConfig() {
 
     checkVoipSession();
 
-    // Check status every 7 seconds
-    const interval = setInterval(checkVoipSession, 7000);
+    // Check status every 5 seconds
+    const interval = setInterval(checkVoipSession, 5000);
 
-    // Live Event Stream for QR and Auth status
+    // Live Event Stream for QR and Auth status (Direct CORS SSE)
     try {
       const clientId = 'config-' + Math.random().toString(36).substring(2);
-      es = new EventSource(`/api/calls/events?clientId=${encodeURIComponent(clientId)}`);
+      es = new EventSource(`${voipBaseUrl}/api/events?clientId=${encodeURIComponent(clientId)}`);
       es.onmessage = (ev) => {
         try {
           const event = JSON.parse(ev.data);
@@ -301,22 +314,25 @@ export function WhatsAppConfig() {
       clearInterval(interval);
       es?.close();
     };
-  }, [provider, wahaSession]);
+  }, [provider, wahaSession, voipBaseUrl]);
 
   const handleCreateVoipSession = async () => {
-    if (!wahaSession) return;
+    if (!wahaSession || !voipBaseUrl) return;
     setVoipLoading(true);
     try {
-      const createRes = await fetch('/api/calls/sessions', {
+      // 1. Create session
+      await fetch(`${voipBaseUrl}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: wahaSession }),
       });
-      if (!createRes.ok) throw new Error('Falha ao criar sessão de VoIP');
 
-      await fetch(`/api/calls/sessions/${wahaSession}/pair`, {
+      // 2. Trigger pair to output QR
+      const pairRes = await fetch(`${voipBaseUrl}/api/sessions/${wahaSession}/pair`, {
         method: 'POST',
       });
+
+      if (!pairRes.ok) throw new Error('Falha ao acionar pareamento');
 
       setVoipStatus('SCAN_QR');
       toast.success('Sessão de VoIP criada. Aguardando pareamento...');
