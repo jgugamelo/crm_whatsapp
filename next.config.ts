@@ -124,14 +124,15 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
+    const voipUrl = process.env.VOIP_URL || "http://localhost:8080";
     return [
       {
         source: "/api/calls/events",
-        destination: "http://localhost:8080/api/events",
+        destination: `${voipUrl}/api/events`,
       },
       {
         source: "/api/calls/:path*",
-        destination: "http://localhost:8080/api/:path*",
+        destination: `${voipUrl}/api/:path*`,
       },
     ];
   },
