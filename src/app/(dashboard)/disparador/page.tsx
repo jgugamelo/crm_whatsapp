@@ -1,11 +1,27 @@
 "use client";
 
 import { Megaphone, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export default function DisparadorPage() {
   const [iframeKey, setIframeKey] = useState(0);
+  const [disparadorUrl, setDisparadorUrl] = useState("https://zucchini-optimism-production-68a0.up.railway.app/dashboard");
+
+  useEffect(() => {
+    fetch("/api/whatsapp/external-urls")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.disparadorUrl) {
+          // If the user inputs a base URL, make sure it includes the /dashboard path if needed
+          const url = data.disparadorUrl.endsWith("/dashboard") 
+            ? data.disparadorUrl 
+            : `${data.disparadorUrl.replace(/\/$/, "")}/dashboard`;
+          setDisparadorUrl(url);
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch disparador URL:", err));
+  }, []);
 
   const handleRefresh = () => {
     setIframeKey((prev) => prev + 1);
@@ -45,7 +61,7 @@ export default function DisparadorPage() {
       <div className="relative flex-1 w-full overflow-hidden rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm shadow-xl">
         <iframe
           key={iframeKey}
-          src="https://zucchini-optimism-production-68a0.up.railway.app/dashboard"
+          src={disparadorUrl}
           className="absolute inset-0 h-full w-full border-0 rounded-xl bg-background"
           allow="clipboard-write; camera; microphone"
           title="Disparador de Mensagens DDM"

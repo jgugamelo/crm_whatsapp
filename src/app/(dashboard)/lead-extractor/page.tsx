@@ -1,11 +1,23 @@
 "use client";
 
 import { Globe, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export default function LeadExtractorPage() {
   const [iframeKey, setIframeKey] = useState(0);
+  const [leadExtractorUrl, setLeadExtractorUrl] = useState("https://grupoddmlead.lovable.app/");
+
+  useEffect(() => {
+    fetch("/api/whatsapp/external-urls")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.leadExtractorUrl) {
+          setLeadExtractorUrl(data.leadExtractorUrl);
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch lead extractor URL:", err));
+  }, []);
 
   const handleRefresh = () => {
     setIframeKey((prev) => prev + 1);
@@ -45,7 +57,7 @@ export default function LeadExtractorPage() {
       <div className="relative flex-1 w-full overflow-hidden rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm shadow-xl">
         <iframe
           key={iframeKey}
-          src="https://grupoddmlead.lovable.app/"
+          src={leadExtractorUrl}
           className="absolute inset-0 h-full w-full border-0 rounded-xl bg-background"
           allow="clipboard-write; camera; microphone"
           title="Extrator de Leads Lovable"
