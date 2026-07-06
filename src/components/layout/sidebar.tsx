@@ -9,6 +9,7 @@ import { useTotalUnread } from "@/hooks/use-total-unread";
 import {
   Crown,
   GitBranch,
+  Globe,
   LayoutDashboard,
   LogOut,
   MessageSquare,
@@ -91,6 +92,7 @@ const navItems: NavItem[] = [
   { href: "/broadcasts", label: "Transmissões", icon: Radio },
   { href: "/automations", label: "Automações", icon: Zap },
   { href: "/flows", label: "Fluxos", icon: Workflow, beta: true },
+  { href: "/lead-extractor", label: "Extrator de leads", icon: Globe },
 ];
 
 const bottomNavItems = [
