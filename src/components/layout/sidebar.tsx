@@ -12,6 +12,7 @@ import {
   Globe,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   MessageSquare,
   Radio,
   Settings,
@@ -93,6 +94,7 @@ const navItems: NavItem[] = [
   { href: "/automations", label: "Automações", icon: Zap },
   { href: "/flows", label: "Fluxos", icon: Workflow, beta: true },
   { href: "/lead-extractor", label: "Extrator de leads", icon: Globe },
+  { href: "/disparador", label: "Disparador", icon: Megaphone },
 ];
 
 const bottomNavItems = [
