@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
+import { decrypt } from '@/lib/whatsapp/encryption'
 
 export async function POST(request: Request) {
   try {
@@ -164,7 +165,7 @@ export async function POST(request: Request) {
             avatarUrl = await getWahaProfilePicture({
               waha_url: config.waha_url,
               waha_session: config.waha_session,
-              waha_api_key: config.waha_api_key,
+              waha_api_key: config.waha_api_key ? decrypt(config.waha_api_key) : null,
             }, phone)
 
             if (avatarUrl) {
@@ -184,7 +185,7 @@ export async function POST(request: Request) {
           avatarUrl = await getWahaProfilePicture({
             waha_url: config.waha_url,
             waha_session: config.waha_session,
-            waha_api_key: config.waha_api_key,
+            waha_api_key: config.waha_api_key ? decrypt(config.waha_api_key) : null,
           }, phone)
         } catch (e) {
           console.error('[waha/webhook] Failed to fetch avatar for new contact:', e)
@@ -264,7 +265,6 @@ export async function POST(request: Request) {
         }
         if (fileKey) {
           try {
-            const { decrypt } = await import('@/lib/whatsapp/encryption')
             const apiKey = config.waha_api_key ? decrypt(config.waha_api_key) : null
             const headers: Record<string, string> = {}
             if (apiKey) {
