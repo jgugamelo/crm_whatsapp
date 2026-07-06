@@ -1,0 +1,601 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { 
+  Plus, 
+  Play, 
+  Pause, 
+  Copy, 
+  Trash2, 
+  Megaphone, 
+  Clock, 
+  Tag, 
+  Smartphone, 
+  MessageSquare,
+  Sparkles,
+  Layers,
+  Calendar,
+  X,
+  FileText
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+
+interface Campaign {
+  id: string;
+  nome: string;
+  descricao?: string;
+  objetivo?: string;
+  status: string;
+  session_ids: string[];
+  tags_filtro: string[];
+  mensagens: any[];
+  intervalo_min: number;
+  intervalo_max: number;
+  janela_inicio: string;
+  janela_fim: string;
+  created_at: string;
+}
+
+interface TagItem {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+interface WahaSession {
+  id: string;
+  name: string;
+  phone_info?: { id: string };
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  rascunho: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  em_execucao: "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
+  pausada: "bg-amber-500/10 text-amber-500 border border-amber-500/20",
+  encerrada: "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  rascunho: "Rascunho",
+  em_execucao: "Em Execução",
+  pausada: "Pausada",
+  encerrada: "Encerrada",
+};
+
+export default function CampanhasPage() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tags, setTags] = useState<TagItem[]>([]);
+  const [sessions, setSessions] = useState<WahaSession[]>([]);
+
+  // Form Modal States
+  const [showModal, setShowModal] = useState(false);
+  const [nome, setNome] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [objetivo, setObjetivo] = useState("");
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [intervaloMin, setIntervaloMin] = useState(30);
+  const [intervaloMax, setIntervaloMax] = useState(60);
+  const [janelaInicio, setJanelaInicio] = useState("08:00");
+  const [janelaFim, setJanelaFim] = useState("18:00");
+  const [mensagens, setMensagens] = useState<any[]>([{ tipo: "texto", conteudo: "" }]);
+
+  // Load Data on Mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const supabase = createClient();
+
+      // Load Campaigns
+      const { data: campaignList } = await supabase
+        .from("campaigns")
+        .select("*")
+        .order("created_at", { ascending: false });
+      setCampaigns(campaignList ?? []);
+
+      // Load Tags
+      const { data: tagList } = await supabase.from("tags").select("id, name, color").order("name");
+      setTags(tagList ?? []);
+
+      // Load Active WAHA Sessions
+      const { data: configList } = await supabase
+        .from("whatsapp_config")
+        .select("id, waha_session, phone_info")
+        .eq("provider", "waha");
+
+      const wahaSessions = (configList ?? []).map((c) => ({
+        id: c.id,
+        name: c.waha_session || "Sessão WAHA",
+        phone_info: c.phone_info,
+      }));
+      setSessions(wahaSessions);
+    } catch (err) {
+      console.error("Failed to load campaigns metadata:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Start Campaign
+  const handleStart = async (id: string) => {
+    try {
+      const res = await fetch(`/api/disparador/campaigns/${id}/start`, { method: "POST" });
+      if (res.ok) {
+        toast.success("Campanha iniciada e disparos agendados!");
+        loadData();
+      } else {
+        const err = await res.json();
+        throw new Error(err.error || "Erro ao iniciar campanha");
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Pause Campaign
+  const handlePause = async (id: string) => {
+    try {
+      const res = await fetch(`/api/disparador/campaigns/${id}/stop?action=pause`, { method: "POST" });
+      if (res.ok) {
+        toast.success("Campanha pausada com sucesso.");
+        loadData();
+      }
+    } catch (err: any) {
+      toast.error("Erro ao pausar campanha.");
+    }
+  };
+
+  // Stop/Close Campaign
+  const handleStop = async (id: string) => {
+    try {
+      const res = await fetch(`/api/disparador/campaigns/${id}/stop?action=stop`, { method: "POST" });
+      if (res.ok) {
+        toast.success("Campanha encerrada e fila cancelada.");
+        loadData();
+      }
+    } catch (err: any) {
+      toast.error("Erro ao encerrar campanha.");
+    }
+  };
+
+  // Delete Campaign
+  const handleDelete = async (id: string) => {
+    if (!confirm("Tem certeza que deseja deletar esta campanha permanentemente?")) return;
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("campaigns").delete().eq("id", id);
+      if (error) throw error;
+      toast.success("Campanha deletada.");
+      loadData();
+    } catch (err: any) {
+      toast.error("Erro ao deletar campanha.");
+    }
+  };
+
+  // Submit Form
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nome.trim()) {
+      toast.error("Insira o nome da campanha.");
+      return;
+    }
+    if (selectedSessions.length === 0) {
+      toast.error("Selecione pelo menos uma sessão do WhatsApp.");
+      return;
+    }
+    if (mensagens.some((m) => m.tipo === "texto" && !m.conteudo.trim())) {
+      toast.error("Todas as mensagens de texto precisam de conteúdo.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const campaignData = {
+        nome,
+        descricao,
+        objetivo,
+        session_ids: selectedSessions,
+        tags_filtro: selectedTags,
+        mensagens,
+        intervalo_min: intervaloMin,
+        intervalo_max: intervaloMax,
+        janela_inicio: janelaInicio,
+        janela_fim: janelaFim,
+        status: "rascunho",
+      };
+
+      const { error } = await supabase.from("campaigns").insert(campaignData);
+      if (error) throw error;
+
+      toast.success("Campanha criada!");
+      setShowModal(false);
+      resetForm();
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao criar campanha");
+    }
+  };
+
+  const resetForm = () => {
+    setNome("");
+    setDescricao("");
+    setObjetivo("");
+    setSelectedSessions([]);
+    setSelectedTags([]);
+    setMensagens([{ tipo: "texto", conteudo: "" }]);
+    setIntervaloMin(30);
+    setIntervaloMax(60);
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)] flex-col space-y-4 p-4 lg:p-6 overflow-hidden">
+      {/* Header */}
+      <div className="flex flex-col justify-between gap-4 border-b border-border/40 pb-4 sm:flex-row sm:items-center">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Megaphone className="h-5 w-5" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              Campanhas de Disparo
+            </h1>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Gerencie disparos agendados em lote e acompanhe o processamento no servidor.
+          </p>
+        </div>
+        <Button onClick={() => setShowModal(true)} className="gap-1.5 self-start">
+          <Plus className="h-4 w-4" /> Nova Campanha
+        </Button>
+      </div>
+
+      {/* Campaigns list */}
+      <div className="flex-1 overflow-y-auto pr-2">
+        {loading ? (
+          <div className="flex h-48 items-center justify-center text-muted-foreground">
+            Carregando campanhas...
+          </div>
+        ) : campaigns.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center text-center text-muted-foreground border border-dashed border-border rounded-xl">
+            <Megaphone className="h-10 w-10 opacity-20 mb-2" />
+            <h4 className="font-semibold">Nenhuma campanha cadastrada</h4>
+            <p className="text-xs max-w-xs mt-1">Crie a sua primeira campanha de disparos clicando no botão acima.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {campaigns.map((c) => (
+              <div key={c.id} className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-sm relative overflow-hidden">
+                <header className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-bold text-foreground truncate max-w-[180px]">{c.nome}</h3>
+                    <p className="text-xs text-muted-foreground">{c.objetivo || "Suporte/Envio Geral"}</p>
+                  </div>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[c.status] || STATUS_COLORS.rascunho}`}>
+                    {STATUS_LABELS[c.status] || c.status}
+                  </span>
+                </header>
+
+                <p className="text-xs text-muted-foreground line-clamp-2 min-h-[32px]">{c.descricao || "Sem descrição fornecida."}</p>
+
+                {/* Configurations Overview */}
+                <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] text-muted-foreground border-t border-border/40">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Clock className="h-3.5 w-3.5" /> Delay: {c.intervalo_min}s - {c.intervalo_max}s
+                  </div>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Tag className="h-3.5 w-3.5" /> Filtro: {c.tags_filtro.length > 0 ? `${c.tags_filtro.length} tags` : "Todos"}
+                  </div>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Smartphone className="h-3.5 w-3.5" /> Sessões: {c.session_ids.length} ativas
+                  </div>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Calendar className="h-3.5 w-3.5" /> Janela: {c.janela_inicio} - {c.janela_fim}
+                  </div>
+                </div>
+
+                {/* Actions row */}
+                <div className="flex justify-between items-center pt-3 border-t border-border/40">
+                  <div className="flex gap-1.5">
+                    {c.status === "em_execucao" ? (
+                      <Button size="sm" variant="outline" onClick={() => handlePause(c.id)} className="h-8 gap-1 text-xs">
+                        <Pause className="h-3.5 w-3.5" /> Pausar
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => handleStart(c.id)} disabled={c.status === "encerrada"} className="h-8 gap-1 text-xs">
+                        <Play className="h-3.5 w-3.5" /> Iniciar
+                      </Button>
+                    )}
+                    {c.status === "em_execucao" || c.status === "pausada" ? (
+                      <Button size="sm" variant="outline" onClick={() => handleStop(c.id)} className="h-8 text-xs">
+                        Encerrar
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Button size="icon" variant="ghost" onClick={() => handleDelete(c.id)} className="h-8 w-8 text-red-500 hover:text-red-600">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Creation Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border w-full max-w-2xl rounded-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <header className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
+              <h3 className="font-bold text-foreground">Nova Campanha de Disparo</h3>
+              <Button size="icon" variant="ghost" onClick={() => setShowModal(false)} className="h-8 w-8 text-muted-foreground">
+                <X className="h-5 w-5" />
+              </Button>
+            </header>
+
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Nome da Campanha</label>
+                  <input
+                    type="text"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    placeholder="Ex: Reativação Clientes Inativos"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Objetivo</label>
+                  <input
+                    type="text"
+                    value={objetivo}
+                    onChange={(e) => setObjetivo(e.target.value)}
+                    placeholder="Ex: Comercial / Suporte"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Descrição</label>
+                <textarea
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  placeholder="Descreva brevemente a meta da campanha..."
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none resize-none h-16"
+                />
+              </div>
+
+              {/* Sessions Selector */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Sessões de WhatsApp Utilizadas</label>
+                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto border border-border p-2 rounded-md">
+                  {sessions.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Nenhuma sessão WAHA conectada encontrada.</span>
+                  ) : (
+                    sessions.map((s) => (
+                      <label key={s.id} className="flex items-center gap-1.5 bg-muted/50 border border-border rounded px-2.5 py-1 text-xs cursor-pointer hover:bg-muted text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={selectedSessions.includes(s.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedSessions([...selectedSessions, s.id]);
+                            else setSelectedSessions(selectedSessions.filter((id) => id !== s.id));
+                          }}
+                        />
+                        {s.name}
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Filter tags */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Filtro de Contatos por Tags (Opcional - Vazio envia para todos)</label>
+                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto border border-border p-2 rounded-md">
+                  {tags.map((t) => (
+                    <label key={t.id} className="flex items-center gap-1.5 bg-muted/50 border border-border rounded px-2.5 py-1 text-xs cursor-pointer hover:bg-muted text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={selectedTags.includes(t.name)}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedTags([...selectedTags, t.name]);
+                          else setSelectedTags(selectedTags.filter((name) => name !== t.name));
+                        }}
+                      />
+                      {t.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Delays and Windows */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Delay Min (seg)</label>
+                    <input
+                      type="number"
+                      value={intervaloMin}
+                      onChange={(e) => setIntervaloMin(Number(e.target.value))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Delay Max (seg)</label>
+                    <input
+                      type="number"
+                      value={intervaloMax}
+                      onChange={(e) => setIntervaloMax(Number(e.target.value))}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Janela Início</label>
+                    <input
+                      type="text"
+                      value={janelaInicio}
+                      onChange={(e) => setJanelaInicio(e.target.value)}
+                      placeholder="08:00"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none text-center"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Janela Fim</label>
+                    <input
+                      type="text"
+                      value={janelaFim}
+                      onChange={(e) => setJanelaFim(e.target.value)}
+                      placeholder="18:00"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Messages bubbles configuration */}
+              <div className="space-y-2 border-t border-border/40 pt-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                  <Layers className="h-3.5 w-3.5" /> Mensagens Sequenciais
+                </h4>
+                
+                {mensagens.map((msg, i) => (
+                  <div key={i} className="rounded-lg border border-border p-4 bg-muted/20 relative space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-muted-foreground">Mensagem #{i + 1}</span>
+                      {mensagens.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setMensagens(mensagens.filter((_, idx) => idx !== i))}
+                          className="h-6 w-6 text-red-500 hover:bg-red-500/10"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...mensagens];
+                          updated[i].tipo = "texto";
+                          setMensagens(updated);
+                        }}
+                        className={`py-1.5 border rounded-md font-medium ${msg.tipo === "texto" ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border"}`}
+                      >
+                        Texto
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...mensagens];
+                          updated[i].tipo = "ia";
+                          setMensagens(updated);
+                        }}
+                        className={`py-1.5 border rounded-md font-medium flex items-center justify-center gap-1 ${msg.tipo === "ia" ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border"}`}
+                      >
+                        <Sparkles className="h-3 w-3" /> Gerado por IA
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...mensagens];
+                          updated[i].tipo = "imagem";
+                          setMensagens(updated);
+                        }}
+                        className={`py-1.5 border rounded-md font-medium ${msg.tipo === "imagem" ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border"}`}
+                      >
+                        Imagem
+                      </button>
+                    </div>
+
+                    {msg.tipo === "texto" && (
+                      <textarea
+                        value={msg.conteudo}
+                        onChange={(e) => {
+                          const updated = [...mensagens];
+                          updated[i].conteudo = e.target.value;
+                          setMensagens(updated);
+                        }}
+                        placeholder="Escreva a mensagem..."
+                        className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none resize-none"
+                      />
+                    )}
+
+                    {msg.tipo === "ia" && (
+                      <textarea
+                        value={msg.prompt}
+                        onChange={(e) => {
+                          const updated = [...mensagens];
+                          updated[i].prompt = e.target.value;
+                          setMensagens(updated);
+                        }}
+                        placeholder="Escreva o prompt da IA... Ex: Peça para comprar o curso X com tom consultivo."
+                        className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none resize-none"
+                      />
+                    )}
+
+                    {msg.tipo === "imagem" && (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={msg.url}
+                          onChange={(e) => {
+                            const updated = [...mensagens];
+                            updated[i].url = e.target.value;
+                            setMensagens(updated);
+                          }}
+                          placeholder="Link da imagem (URL)..."
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          value={msg.conteudo}
+                          onChange={(e) => {
+                            const updated = [...mensagens];
+                            updated[i].conteudo = e.target.value;
+                            setMensagens(updated);
+                          }}
+                          placeholder="Legenda da imagem (Opcional)..."
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setMensagens([...mensagens, { tipo: "texto", conteudo: "" }])}
+                  className="w-full border-dashed border-border"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Adicionar Mensagem Sequencial
+                </Button>
+              </div>
+
+              <footer className="pt-4 border-t border-border flex justify-end gap-3 bg-muted/10 p-4 rounded-b-xl -mx-6 -mb-6">
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
+                <Button type="submit">Criar Campanha</Button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,288 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { 
+  ShieldAlert, 
+  Plus, 
+  Trash2, 
+  X,
+  Search,
+  CheckCircle2,
+  AlertOctagon
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+
+interface BlacklistEntry {
+  id: string;
+  telefone: string;
+  motivo: string;
+  data_bloqueio: string;
+  bloqueado_por?: string;
+  mensagem_detectada?: string;
+}
+
+const MOTIVO_LABELS: Record<string, string> = {
+  opt_out: "Pediu para sair (Opt-out)",
+  bloqueio_manual: "Bloqueio Manual",
+  numero_invalido: "Número Inválido",
+  reclamacao: "Reclamação de Spam",
+  risco_juridico: "Risco Jurídico",
+  resposta_negativa: "Resposta Negativa",
+};
+
+export default function BlacklistPage() {
+  const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
+  const [filteredList, setFilteredList] = useState<BlacklistEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  // Modal Form States
+  const [showModal, setShowModal] = useState(false);
+  const [telefone, setTelefone] = useState("");
+  const [motivo, setMotivo] = useState("bloqueio_manual");
+  const [mensagemDetectada, setMensagemDetectada] = useState("");
+
+  useEffect(() => {
+    loadBlacklist();
+  }, []);
+
+  const loadBlacklist = async () => {
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("blacklist")
+        .select("*")
+        .order("data_bloqueio", { ascending: false });
+      
+      if (error) throw error;
+      setBlacklist(data ?? []);
+      setFilteredList(data ?? []);
+    } catch (err) {
+      console.error("Failed to load blacklist:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter List based on Search Query
+  useEffect(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) {
+      setFilteredList(blacklist);
+    } else {
+      setFilteredList(
+        blacklist.filter(
+          (b) =>
+            b.telefone.toLowerCase().includes(query) ||
+            (b.mensagem_detectada && b.mensagem_detectada.toLowerCase().includes(query))
+        )
+      );
+    }
+  }, [search, blacklist]);
+
+  // Remove from Blacklist
+  const handleRemove = async (id: string) => {
+    if (!confirm("Tem certeza que deseja remover este número da blacklist? Ele voltará a receber disparos.")) return;
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("blacklist").delete().eq("id", id);
+      if (error) throw error;
+      toast.success("Número removido da blacklist!");
+      loadBlacklist();
+    } catch (err: any) {
+      toast.error("Erro ao remover da blacklist.");
+    }
+  };
+
+  // Add to Blacklist
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!telefone.trim()) {
+      toast.error("Insira o número do telefone.");
+      return;
+    }
+
+    // Sanitize phone input
+    let cleanPhone = telefone.replace(/\D/g, "");
+    if (!cleanPhone.startsWith("+")) {
+      cleanPhone = "+" + cleanPhone;
+    }
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("blacklist").insert({
+        telefone: cleanPhone,
+        motivo,
+        mensagem_detectada: mensagemDetectada || null,
+        bloqueado_por: "Painel CRM",
+      });
+
+      if (error) {
+        if (error.code === "23505") throw new Error("Este número já está na blacklist.");
+        throw error;
+      }
+
+      toast.success("Número adicionado à blacklist!");
+      setShowModal(false);
+      setTelefone("");
+      setMensagemDetectada("");
+      loadBlacklist();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao adicionar à blacklist.");
+    }
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)] flex-col space-y-4 p-4 lg:p-6 overflow-hidden">
+      {/* Header */}
+      <div className="flex flex-col justify-between gap-4 border-b border-border/40 pb-4 sm:flex-row sm:items-center">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              Blacklist de Números
+            </h1>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Evite spam e bloqueios protegendo contatos que pediram opt-out ou são inválidos.
+          </p>
+        </div>
+        <Button onClick={() => setShowModal(true)} variant="destructive" className="gap-1.5 self-start">
+          <Plus className="h-4 w-4" /> Bloquear Número
+        </Button>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por telefone ou palavra bloqueada..."
+          className="w-full rounded-md border border-input bg-background pl-9 pr-4 py-2 text-sm focus:outline-none"
+        />
+      </div>
+
+      {/* Blacklist List */}
+      <div className="flex-1 overflow-y-auto pr-2">
+        {loading ? (
+          <div className="flex h-48 items-center justify-center text-muted-foreground">
+            Carregando blacklist...
+          </div>
+        ) : filteredList.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center text-center text-muted-foreground border border-dashed border-border rounded-xl">
+            <CheckCircle2 className="h-10 w-10 text-emerald-500/30 mb-2" />
+            <h4 className="font-semibold text-foreground">Sua blacklist está vazia</h4>
+            <p className="text-xs max-w-xs mt-1">Nenhum número foi bloqueado ainda. Adicione contatos manualmente se necessário.</p>
+          </div>
+        ) : (
+          <div className="border border-border rounded-xl bg-card overflow-hidden shadow-sm">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead className="border-b border-border bg-muted/30 text-muted-foreground font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-3.5">Telefone</th>
+                  <th className="px-5 py-3.5">Motivo</th>
+                  <th className="px-5 py-3.5">Mensagem opt-out</th>
+                  <th className="px-5 py-3.5">Data do bloqueio</th>
+                  <th className="px-5 py-3.5 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredList.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-muted/10">
+                    <td className="px-5 py-4 font-mono font-semibold text-foreground">{entry.telefone}</td>
+                    <td className="px-5 py-4">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-500 border border-red-500/15">
+                        <AlertOctagon className="h-3 w-3" /> {MOTIVO_LABELS[entry.motivo] || entry.motivo}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 max-w-xs truncate text-muted-foreground italic">
+                      {entry.mensagem_detectada || "Bloqueio Manual"}
+                    </td>
+                    <td className="px-5 py-4 text-muted-foreground">
+                      {new Date(entry.data_bloqueio).toLocaleString()}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleRemove(entry.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Creation Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border w-full max-w-md rounded-xl shadow-2xl flex flex-col overflow-hidden">
+            <header className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
+              <h3 className="font-bold text-foreground">Adicionar à Blacklist</h3>
+              <Button size="icon" variant="ghost" onClick={() => setShowModal(false)} className="h-8 w-8 text-muted-foreground">
+                <X className="h-5 w-5" />
+              </Button>
+            </header>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground font-semibold">Telefone do Contato</label>
+                <input
+                  type="text"
+                  value={telefone}
+                  onChange={(e) => setTelefone(e.target.value)}
+                  placeholder="Ex: 5521999999999"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                />
+                <p className="text-[10px] text-muted-foreground">Insira o código do país + DDD + Número.</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground font-semibold">Motivo</label>
+                <select
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                >
+                  {Object.entries(MOTIVO_LABELS).map(([k, label]) => (
+                    <option key={k} value={k}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground font-semibold">Mensagem Opcional (Opt-out recebido)</label>
+                <textarea
+                  value={mensagemDetectada}
+                  onChange={(e) => setMensagemDetectada(e.target.value)}
+                  placeholder="Ex: 'Não quero mais receber mensagens'"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none resize-none h-16"
+                />
+              </div>
+
+              <footer className="pt-4 border-t border-border flex justify-end gap-3 -mx-6 -mb-6 p-6 bg-muted/10">
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
+                <Button type="submit" variant="destructive">Bloquear</Button>
+              </footer>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
