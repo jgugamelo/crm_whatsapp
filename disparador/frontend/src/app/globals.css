@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --sidebar-width: 256px;
+
+  /* DDM Brand */
+  --ddm-primary:        #FF5706;
+  --ddm-primary-dark:   #CC4500;
+  --ddm-primary-light:  #FF8A4C;
+  --ddm-primary-bg:     #FFF1EB;
+
+  /* Grays */
+  --ddm-gray-900: #1A1A2E;
+  --ddm-gray-700: #374151;
+  --ddm-gray-500: #6B7280;
+  --ddm-gray-300: #D1D5DB;
+  --ddm-gray-100: #F3F4F6;
+  --ddm-gray-50:  #F9FAFB;
+
+  /* States */
+  --ddm-success: #10B981;
+  --ddm-warning: #F59E0B;
+  --ddm-danger:  #EF4444;
+  --ddm-info:    #3B82F6;
+
+  /* Page background */
+  --ddm-cream: #FAF7F4;
+
+  /* Dark sidebar */
+  --sidebar-bg:     #1A1A2E;
+  --sidebar-surface:#1E293B;
+  --sidebar-border: #334155;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--ddm-cream);
+  color: var(--ddm-gray-900);
+  font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Poppins', sans-serif;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--ddm-gray-300); border-radius: 99px; }
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 text-white font-semibold px-5 py-2.5 rounded-lg transition-all text-sm shadow-sm cursor-pointer;
+    background-color: var(--ddm-primary);
+    font-family: 'Poppins', sans-serif;
+    min-height: 44px;
+  }
+  .btn-primary:hover {
+    background-color: var(--ddm-primary-dark);
+  }
+  .btn-primary:disabled {
+    background-color: var(--ddm-gray-300);
+    color: var(--ddm-gray-500);
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 font-semibold px-5 py-2.5 rounded-lg transition-all text-sm cursor-pointer bg-white;
+    border: 1px solid var(--ddm-primary);
+    color: var(--ddm-primary);
+    font-family: 'Poppins', sans-serif;
+    min-height: 44px;
+  }
+  .btn-secondary:hover {
+    background-color: var(--ddm-primary-bg);
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 bg-white font-medium px-4 py-2.5 rounded-lg border border-gray-200 transition-all text-sm cursor-pointer;
+    color: var(--ddm-gray-700);
+    min-height: 44px;
+  }
+  .btn-ghost:hover {
+    background-color: var(--ddm-gray-100);
+  }
+
+  .input {
+    @apply w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition-all;
+    font-family: 'Inter', sans-serif;
+    min-height: 44px;
+    outline: none;
+  }
+  .input:focus {
+    border-color: var(--ddm-primary);
+    box-shadow: 0 0 0 3px rgba(255, 87, 6, 0.15);
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* DDM accent / active highlight */
+  .ddm-active {
+    background-color: rgba(255, 87, 6, 0.08);
+    color: var(--ddm-primary);
+  }
+}

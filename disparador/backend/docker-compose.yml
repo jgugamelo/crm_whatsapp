@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ghcr.io/jgugamelo/whatsapp-backend:latest
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - WAHA_BASE_URL=${WAHA_BASE_URL}
+      - WAHA_API_KEY=${WAHA_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whatsapp-backend.rule=Host(`backend.meuchatia.com.br`)"
+      - "traefik.http.routers.whatsapp-backend.entrypoints=websecure"
+      - "traefik.http.routers.whatsapp-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.whatsapp-backend.loadbalancer.server.port=3001"
+    networks:
+      - network_public
+    restart: unless-stopped
+
+networks:
+  network_public:
+    external: true
