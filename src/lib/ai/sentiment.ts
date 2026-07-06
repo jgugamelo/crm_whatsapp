@@ -53,7 +53,7 @@ export async function analyzeConversationSentimentAndTags(
   // 3. Load recent conversation history (last 15 messages)
   const { data: messages, error: messagesError } = await db
     .from("messages")
-    .select("direction, content_text, created_at, sender_type")
+    .select("content_text, created_at, sender_type")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(15);
@@ -68,7 +68,7 @@ export async function analyzeConversationSentimentAndTags(
   // Format history text for the LLM
   const historyText = history
     .map((m) => {
-      const role = m.direction === "inbound" || m.sender_type === "customer" ? "Cliente" : "Atendente";
+      const role = m.sender_type === "customer" ? "Cliente" : "Atendente";
       return `${role}: ${m.content_text || ""}`;
     })
     .join("\n");

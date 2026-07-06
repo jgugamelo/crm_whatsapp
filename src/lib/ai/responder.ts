@@ -36,7 +36,7 @@ export async function handleAiAutoResponse(
   // 2. Load recent conversation history (last 10 messages)
   const { data: messages, error: messagesError } = await db
     .from("messages")
-    .select("direction, content_text, created_at, sender_type")
+    .select("content_text, created_at, sender_type")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -184,7 +184,6 @@ export async function handleAiAutoResponse(
       account_id: accountId,
       conversation_id: conversationId,
       message_id: sentMessageId,
-      direction: "outbound",
       content_type: "text",
       content_text: generatedText,
       status: "sent",
@@ -219,7 +218,7 @@ async function generateGeminiResponse(
   const contents = [];
 
   for (const msg of history) {
-    const isCustomer = msg.direction === "inbound" || msg.sender_type === "customer";
+    const isCustomer = msg.sender_type === "customer";
     contents.push({
       role: isCustomer ? "user" : "model",
       parts: [{ text: msg.content_text || "" }],
@@ -267,7 +266,7 @@ async function generateOpenAiResponse(
   }
 
   for (const msg of history) {
-    const isCustomer = msg.direction === "inbound" || msg.sender_type === "customer";
+    const isCustomer = msg.sender_type === "customer";
     messages.push({
       role: isCustomer ? "user" : "assistant",
       content: msg.content_text || "",
@@ -306,7 +305,7 @@ async function generateClaudeResponse(
   const messages = [];
 
   for (const msg of history) {
-    const isCustomer = msg.direction === "inbound" || msg.sender_type === "customer";
+    const isCustomer = msg.sender_type === "customer";
     messages.push({
       role: isCustomer ? ("user" as const) : ("assistant" as const),
       content: msg.content_text || "",
@@ -350,7 +349,7 @@ async function generateHermesResponse(
   }
 
   for (const msg of history) {
-    const isCustomer = msg.direction === "inbound" || msg.sender_type === "customer";
+    const isCustomer = msg.sender_type === "customer";
     messages.push({
       role: isCustomer ? "user" : "assistant",
       content: msg.content_text || "",
