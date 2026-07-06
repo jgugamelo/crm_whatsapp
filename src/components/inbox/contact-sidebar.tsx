@@ -238,7 +238,7 @@ export function ContactSidebar({
                     bg: "bg-emerald-500/10",
                     border: "border-emerald-500/20",
                     label: "Positivo",
-                    desc: "O cliente demonstra satisfação, acordo ou interesse positivo nas mensagens recentes."
+                    desc: "Aproveite a boa receptividade! Mantenha o atendimento ágil e conduza para o fechamento de forma objetiva."
                   },
                   neutral: {
                     emoji: "😐",
@@ -246,7 +246,7 @@ export function ContactSidebar({
                     bg: "bg-slate-500/10",
                     border: "border-slate-500/20",
                     label: "Neutro",
-                    desc: "O cliente mantém um tom formal, objetivo ou meramente informativo."
+                    desc: "Cliente direto e formal. Responda de forma clara, profissional, focada em solucionar as dúvidas sem enrolação."
                   },
                   negative: {
                     emoji: "😡",
@@ -254,7 +254,7 @@ export function ContactSidebar({
                     bg: "bg-rose-500/10",
                     border: "border-rose-500/20",
                     label: "Negativo",
-                    desc: "O cliente expressa frustração, insatisfação, reclamação ou recusa."
+                    desc: "Atenção: cliente insatisfeito! Aja de forma muito empática e paciente. Foque em priorizar a resolução do problema dele."
                   },
                   mixed: {
                     emoji: "😕",
@@ -262,7 +262,7 @@ export function ContactSidebar({
                     bg: "bg-amber-500/10",
                     border: "border-amber-500/20",
                     label: "Misto",
-                    desc: "A conversa possui tons mistos, alternando entre pontos positivos e de insatisfação."
+                    desc: "Tons variados de satisfação/insatisfação. Seja paciente para desfazer mal-entendidos e reforce os pontos positivos da proposta."
                   },
                   unknown: {
                     emoji: "❔",
@@ -270,7 +270,7 @@ export function ContactSidebar({
                     bg: "bg-muted",
                     border: "border-border",
                     label: "Não Analisado",
-                    desc: "Sentimento ainda não analisado para esta conversa."
+                    desc: "Clique no botão de recarregar acima para analisar a conversa e receber recomendações de atendimento."
                   }
                 };
                 const currentSentiment = conversation.sentiment || "unknown";
