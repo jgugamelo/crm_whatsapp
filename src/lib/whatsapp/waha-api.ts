@@ -93,11 +93,20 @@ export async function stopWahaSession(config: WahaConfig): Promise<void> {
 }
 
 export async function getWahaQrCode(config: WahaConfig): Promise<Response> {
-  const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/qr`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch QR code: ${res.status}`);
+  // Try the new auth/qr endpoint first
+  const res = await wahaFetch(config, `/api/${config.waha_session}/auth/qr?format=image`, {
+    headers: {
+      'Accept': 'image/png',
+    }
+  });
+  if (res.ok) return res;
+
+  // Fall back to /api/sessions/{session}/qr if the session version requires it
+  const fallback = await wahaFetch(config, `/api/sessions/${config.waha_session}/qr`);
+  if (!fallback.ok) {
+    throw new Error(`Failed to fetch QR code: ${fallback.status}`);
   }
-  return res;
+  return fallback;
 }
 
 export interface WahaSendResult {
