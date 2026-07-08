@@ -17,10 +17,12 @@ import {
   Layers,
   Calendar,
   X,
-  FileText
+  FileText,
+  ArrowLeft
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import Link from "next/link";
 
 interface Campaign {
   id: string;
@@ -262,6 +264,13 @@ export default function CampanhasPage() {
       <div className="flex flex-col justify-between gap-4 border-b border-border/40 pb-4 sm:flex-row sm:items-center">
         <div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/disparador"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mr-1"
+              title="Voltar para a Central"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Megaphone className="h-5 w-5" />
             </div>
