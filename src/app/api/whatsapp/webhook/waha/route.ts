@@ -304,16 +304,19 @@ export async function POST(request: Request) {
       // We download the media from WAHA and upload it permanently to Supabase Storage (chat-media bucket)
       // to prevent files disappearing when the WAHA server cache is restarted or cleared.
       let mediaUrl: string | null = null
-      if (payload.media) {
+      const mediaInfo = payload.media || payload.sticker
+      if (mediaInfo) {
         let fileKey = ''
-        if (payload.media.url) {
-          const parts = payload.media.url.split('/api/files/')
+        if (mediaInfo.url) {
+          const parts = mediaInfo.url.split('/api/files/')
           if (parts.length > 1) {
             fileKey = parts[1]
           }
         }
-        if (!fileKey && payload.media.filename) {
-          fileKey = `${config.waha_session}/${payload.media.filename}`
+        if (!fileKey && mediaInfo.filename) {
+          fileKey = `${config.waha_session}/${mediaInfo.filename}`
+        } else if (!fileKey && mediaInfo.id) {
+          fileKey = `${config.waha_session}/${mediaInfo.id}.webp`
         }
         if (fileKey) {
           try {
@@ -335,7 +338,7 @@ export async function POST(request: Request) {
             const fileRes = await fetch(fileUrl, { headers })
             if (fileRes.ok) {
               const buffer = await fileRes.arrayBuffer()
-              const contentType = fileRes.headers.get('Content-Type') || payload.media.mimetype || 'application/octet-stream'
+              const contentType = fileRes.headers.get('Content-Type') || mediaInfo.mimetype || mediaInfo.mime_type || 'application/octet-stream'
               
               // Build file name and upload to account-scoped path in chat-media bucket
               const filename = fileKey.split('/').pop() || 'file'
@@ -371,13 +374,14 @@ export async function POST(request: Request) {
       // Use mimetype-based classification if media details are available,
       // fallback to type-based mapping.
       let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'poll' | 'vcard' | 'revoked' = 'text'
-      if (payload.media) {
-        const mime = payload.media.mimetype || ''
+      if (mediaInfo) {
+        const mime = mediaInfo.mimetype || mediaInfo.mime_type || ''
         if (mime.startsWith('image/')) {
           contentType = type === 'sticker' ? 'sticker' : 'image'
         }
         else if (mime.startsWith('video/')) contentType = 'video'
         else if (mime.startsWith('audio/')) contentType = 'audio'
+        else if (type === 'sticker') contentType = 'sticker'
         else contentType = 'document'
       } else {
         if (type === 'image') contentType = 'image'
