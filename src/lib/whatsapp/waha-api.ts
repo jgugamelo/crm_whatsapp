@@ -242,14 +242,14 @@ export async function sendWahaReaction(
   emoji: string
 ): Promise<void> {
   const res = await wahaFetch(config, '/api/reaction', {
-    method: 'PUT',
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       session: config.waha_session,
       messageId: messageId,
-      emoji: emoji,
+      reaction: emoji,
     }),
   });
 

@@ -304,7 +304,7 @@ export async function POST(request: Request) {
       // We download the media from WAHA and upload it permanently to Supabase Storage (chat-media bucket)
       // to prevent files disappearing when the WAHA server cache is restarted or cleared.
       let mediaUrl: string | null = null
-      if (hasMedia && payload.media) {
+      if (payload.media) {
         let fileKey = ''
         if (payload.media.url) {
           const parts = payload.media.url.split('/api/files/')
@@ -371,7 +371,7 @@ export async function POST(request: Request) {
       // Use mimetype-based classification if media details are available,
       // fallback to type-based mapping.
       let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'poll' | 'vcard' | 'revoked' = 'text'
-      if (hasMedia && payload.media) {
+      if (payload.media) {
         const mime = payload.media.mimetype || ''
         if (mime.startsWith('image/')) {
           contentType = type === 'sticker' ? 'sticker' : 'image'
