@@ -269,6 +269,7 @@ export async function POST(request: Request) {
             const headers: Record<string, string> = {}
             if (apiKey) {
               headers['Authorization'] = `Bearer ${apiKey}`
+              headers['X-Api-Key'] = apiKey
             }
 
             const fileUrl = `${config.waha_url}/api/files/${fileKey}`

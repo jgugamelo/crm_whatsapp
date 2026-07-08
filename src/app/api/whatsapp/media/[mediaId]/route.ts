@@ -79,6 +79,7 @@ export async function GET(
       const headers: Record<string, string> = {}
       if (apiKey) {
         headers['Authorization'] = `Bearer ${apiKey}`
+        headers['X-Api-Key'] = apiKey
       }
 
       const fileUrl = `${wahaConfig.waha_url}/api/files/${file}`
