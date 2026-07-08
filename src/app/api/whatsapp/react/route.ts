@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
+import { sendWahaReaction } from '@/lib/whatsapp/waha-api';
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
     // WhatsApp config + access token. Account-scoped post-multi-user.
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token')
+      .select('phone_number_id, access_token, provider, waha_url, waha_session, waha_api_key')
       .eq('account_id', accountId)
       .single();
 
@@ -122,25 +123,48 @@ export async function POST(request: Request) {
       );
     }
 
-    const accessToken = decrypt(config.access_token);
-    const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
+    if (config.provider === 'waha') {
+      const wahaConfig = {
+        waha_url: config.waha_url,
+        waha_session: config.waha_session,
+        waha_api_key: config.waha_api_key ? decrypt(config.waha_api_key) : null,
+      };
 
-    try {
-      await sendReactionMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: sanitizedPhone,
-        targetMessageId: targetMessage.message_id,
-        emoji,
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Unknown Meta API error';
-      console.error('[whatsapp/react] Meta send failed:', message);
-      return NextResponse.json(
-        { error: `Meta API error: ${message}` },
-        { status: 502 },
-      );
+      try {
+        await sendWahaReaction(
+          wahaConfig,
+          targetMessage.message_id,
+          emoji
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown WAHA API error';
+        console.error('[whatsapp/react] WAHA reaction failed:', message);
+        return NextResponse.json(
+          { error: `WAHA API error: ${message}` },
+          { status: 502 },
+        );
+      }
+    } else {
+      const accessToken = decrypt(config.access_token);
+      const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
+
+      try {
+        await sendReactionMessage({
+          phoneNumberId: config.phone_number_id,
+          accessToken,
+          to: sanitizedPhone,
+          targetMessageId: targetMessage.message_id,
+          emoji,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Unknown Meta API error';
+        console.error('[whatsapp/react] Meta send failed:', message);
+        return NextResponse.json(
+          { error: `Meta API error: ${message}` },
+          { status: 502 },
+        );
+      }
     }
 
     // Mirror into DB. Empty emoji = removal.
