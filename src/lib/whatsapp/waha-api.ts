@@ -238,16 +238,17 @@ export async function requestWahaPairingCode(
 
 export async function sendWahaReaction(
   config: WahaConfig,
+  chatId: string,
   messageId: string,
   emoji: string
 ): Promise<void> {
-  const res = await wahaFetch(config, '/api/reaction', {
+  const res = await wahaFetch(config, `/api/${config.waha_session}/sendReaction`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      session: config.waha_session,
+      chatId: chatId,
       messageId: messageId,
       reaction: emoji,
     }),
