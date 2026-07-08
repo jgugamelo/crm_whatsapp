@@ -113,7 +113,12 @@ export function WhatsAppConfig() {
 
   const handleRequestPairingCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pairingPhone) return;
+    let phoneCleaned = pairingPhone.replace(/\D/g, '');
+    if ((phoneCleaned.length === 10 || phoneCleaned.length === 11) && !phoneCleaned.startsWith('55')) {
+      phoneCleaned = '55' + phoneCleaned;
+      setPairingPhone(phoneCleaned);
+    }
+
     setPairingLoading(true);
     setPairingError(null);
     setPairingCode('');
@@ -124,7 +129,7 @@ export function WhatsAppConfig() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ phoneNumber: pairingPhone }),
+        body: JSON.stringify({ phoneNumber: phoneCleaned }),
       });
 
       const data = await res.json();
@@ -760,28 +765,28 @@ export function WhatsAppConfig() {
                       <div className="flex flex-col space-y-1">
                         <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                           <Key className="size-4 text-primary" />
-                          Pareamento por Código
+                          Conectar por Código (Sem QR Code)
                         </h4>
                         <p className="text-xs text-muted-foreground">
-                          Se preferir parear digitando um código no celular em vez de escanear o QR Code, digite o número do celular abaixo.
+                          Digite o número do celular abaixo para gerar o código de conexão.
                         </p>
                       </div>
 
                       <form onSubmit={handleRequestPairingCode} className="flex gap-2 items-end">
                         <div className="flex-1 space-y-1.5">
                           <Label htmlFor="pairing-phone" className="text-xs text-muted-foreground">
-                            Número do WhatsApp (com código do país)
+                            Número do Celular (com DDD)
                           </Label>
                           <Input
                             id="pairing-phone"
-                            placeholder="Ex: 5521999999999"
+                            placeholder="Ex: 21984354821"
                             value={pairingPhone}
                             onChange={(e) => setPairingPhone(e.target.value)}
                             disabled={pairingLoading}
                             className="bg-background border-border text-sm h-9"
                           />
                           <p className="text-[10px] text-amber-400 font-medium">
-                            ⚠️ Digite o número completo incluindo o código do país (ex: 55 para o Brasil).
+                            💡 Dica: Digite apenas o DDD + Número. O sistema adiciona o 55 automático se você esquecer!
                           </p>
                         </div>
                         <Button 
