@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -24,6 +24,7 @@ import {
   Workflow,
   X,
   Zap,
+  Bot,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
 import { DdmLogo } from "@/components/ui/ddm-logo";
@@ -95,6 +96,7 @@ const navItems: NavItem[] = [
   { href: "/flows", label: "Fluxos", icon: Workflow, beta: true },
   { href: "/lead-extractor", label: "Extrator de leads", icon: Globe },
   { href: "/disparador", label: "Disparador", icon: Megaphone },
+  { href: "/settings?tab=ai", label: "Agente de IA", icon: Bot },
 ];
 
 const bottomNavItems = [
@@ -109,6 +111,7 @@ interface SidebarProps {
 
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
   // Only surface the account-name strip when it actually carries
@@ -200,8 +203,12 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           <ul className="flex flex-col gap-1">
             {navItems.map((item) => {
               const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                item.href.includes("?tab=ai")
+                  ? pathname === "/settings" && searchParams.get("tab") === "ai"
+                  : pathname === item.href ||
+                    (item.href !== "/dashboard" &&
+                     !item.href.startsWith("/settings") &&
+                     pathname.startsWith(item.href));
 
               const showUnreadDot =
                 item.href === "/inbox" && totalUnread > 0 && !isActive;
@@ -247,7 +254,10 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
 
           <ul className="flex flex-col gap-1">
             {bottomNavItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+              const isActive =
+                item.href === "/settings"
+                  ? pathname.startsWith(item.href) && searchParams.get("tab") !== "ai"
+                  : pathname.startsWith(item.href);
               return (
                 <li key={item.href}>
                   <Link
