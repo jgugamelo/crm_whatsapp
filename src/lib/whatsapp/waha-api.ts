@@ -74,11 +74,20 @@ export async function startWahaSession(config: WahaConfig, webhookUrl?: string):
     };
   }
 
-  const createRes = await wahaFetch(config, '/api/sessions', {
+  let createRes = await wahaFetch(config, '/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sessionPayload),
   });
+
+  if (!createRes.ok) {
+    console.warn(`[waha-api] Failed to create session with config (status ${createRes.status}), retrying with name-only body`);
+    createRes = await wahaFetch(config, '/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: config.waha_session }),
+    });
+  }
 
   if (!createRes.ok) {
     // If creation fails (e.g. session already exists and shouldn't be deleted), try to start it directly
