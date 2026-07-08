@@ -55,6 +55,58 @@ export async function POST(request: Request) {
     }
 
     // ============================================================
+    // 1.5. Reaction Synchronization
+    // ============================================================
+    if (event === 'message.reaction') {
+      console.log('[waha/webhook] Reaction payload:', JSON.stringify(payload))
+      const { reaction, messageKey, fromMe } = payload
+      const originalMessageId = messageKey?.id
+      const emoji = reaction?.text
+
+      if (!originalMessageId) {
+        return NextResponse.json({ success: true, message: 'Ignored reaction without message key' })
+      }
+
+      const { data: dbMsg } = await db
+        .from('messages')
+        .select('id, conversation_id')
+        .eq('message_id', originalMessageId)
+        .maybeSingle()
+
+      if (!dbMsg) {
+        console.warn('[waha/webhook] Could not find message in database for reaction:', originalMessageId)
+        return NextResponse.json({ success: true, message: 'Message not found for reaction' })
+      }
+
+      const actorType = fromMe ? 'agent' : 'customer'
+      
+      // Delete any existing reaction from this actor on this message
+      await db
+        .from('message_reactions')
+        .delete()
+        .eq('message_id', dbMsg.id)
+        .eq('actor_type', actorType)
+
+      // Insert the new reaction if an emoji is provided
+      if (emoji) {
+        const { error: insertError } = await db
+          .from('message_reactions')
+          .insert({
+            message_id: dbMsg.id,
+            conversation_id: dbMsg.conversation_id,
+            actor_type: actorType,
+            emoji: emoji,
+          })
+
+        if (insertError) {
+          console.error('[waha/webhook] Failed to insert reaction:', insertError)
+        }
+      }
+
+      return NextResponse.json({ success: true, message: 'Reaction synchronized' })
+    }
+
+    // ============================================================
     // 2. Incoming and outgoing message synchronization
     // ============================================================
     if (event === 'message.any') {
@@ -318,18 +370,24 @@ export async function POST(request: Request) {
       // Map WAHA message types to CRM content_type.
       // Use mimetype-based classification if media details are available,
       // fallback to type-based mapping.
-      let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' = 'text'
+      let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'poll' | 'vcard' | 'revoked' = 'text'
       if (hasMedia && payload.media) {
         const mime = payload.media.mimetype || ''
-        if (mime.startsWith('image/')) contentType = 'image'
+        if (mime.startsWith('image/')) {
+          contentType = type === 'sticker' ? 'sticker' : 'image'
+        }
         else if (mime.startsWith('video/')) contentType = 'video'
         else if (mime.startsWith('audio/')) contentType = 'audio'
         else contentType = 'document'
       } else {
-        if (type === 'image' || type === 'sticker') contentType = 'image'
+        if (type === 'image') contentType = 'image'
+        else if (type === 'sticker') contentType = 'sticker'
         else if (type === 'video') contentType = 'video'
         else if (type === 'audio' || type === 'ptt') contentType = 'audio'
         else if (type === 'document') contentType = 'document'
+        else if (type === 'poll') contentType = 'poll'
+        else if (type === 'vcard' || type === 'contact') contentType = 'vcard'
+        else if (type === 'revoked') contentType = 'revoked'
       }
 
       const messageDate = new Date(timestamp * 1000).toISOString()

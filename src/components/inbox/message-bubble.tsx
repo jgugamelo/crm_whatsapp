@@ -13,6 +13,9 @@ import {
   LayoutTemplate,
   ImageOff,
   CornerDownLeft,
+  BarChart2,
+  User,
+  Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ReplyQuote } from "./reply-quote";
@@ -232,6 +235,60 @@ function MessageContent({ message }: { message: Message }) {
       );
     }
 
+    case "sticker":
+      return (
+        <div className="bg-transparent p-0">
+          {message.media_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={message.media_url}
+              alt="Figurinha"
+              className="max-h-36 max-w-36 bg-transparent object-contain"
+            />
+          ) : (
+            <MediaUnavailable label="Figurinha" />
+          )}
+        </div>
+      );
+
+    case "poll":
+      return (
+        <div className="flex flex-col gap-2 rounded-lg bg-muted/30 p-3 border border-border/40 min-w-48">
+          <div className="flex items-center gap-2 font-semibold text-sm">
+            <BarChart2 className="h-4 w-4 text-primary" />
+            <span>{message.content_text || "Enquete"}</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Votação ativa no WhatsApp.
+          </p>
+        </div>
+      );
+
+    case "vcard":
+      return (
+        <div className="flex items-center gap-3 rounded-lg bg-muted/40 p-3 border border-border/40 min-w-48">
+          <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-primary/10">
+            <User className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">
+              {message.content_text || "Contato Compartilhado"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              vCard de Contato
+            </p>
+          </div>
+        </div>
+      );
+
+    case "revoked":
+      return (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground italic">
+          <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+          <span>Mensagem apagada</span>
+        </div>
+      );
+
     default:
       return (
         <p className="whitespace-pre-wrap break-words text-sm">
@@ -263,7 +320,9 @@ export function MessageBubble({
       <div
         className={cn(
           "relative rounded-2xl px-3 py-2",
-          isAgent
+          message.content_type === "sticker"
+            ? "bg-transparent p-0"
+            : isAgent
             ? "rounded-br-md bg-primary text-primary-foreground"
             : "rounded-bl-md bg-muted text-foreground",
         )}
