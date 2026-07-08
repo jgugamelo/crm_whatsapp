@@ -272,7 +272,8 @@ export async function POST(request: Request) {
               headers['X-Api-Key'] = apiKey
             }
 
-            const fileUrl = `${config.waha_url}/api/files/${fileKey}`
+            const baseUrl = config.waha_url.replace(/\/$/, '')
+            const fileUrl = `${baseUrl}/api/files/${fileKey}`
             console.log('[waha/webhook] Downloading media:', {
               url: fileUrl,
               apiKeyLength: apiKey ? apiKey.length : 0,

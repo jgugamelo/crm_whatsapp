@@ -82,7 +82,8 @@ export async function GET(
         headers['X-Api-Key'] = apiKey
       }
 
-      const fileUrl = `${wahaConfig.waha_url}/api/files/${file}`
+      const baseUrl = wahaConfig.waha_url.replace(/\/$/, '')
+      const fileUrl = `${baseUrl}/api/files/${file}`
       const fileRes = await fetch(fileUrl, { headers })
       if (!fileRes.ok) {
         return NextResponse.json(
