@@ -53,7 +53,7 @@ export async function POST(
     // 3. Load active contacts
     const { data: allContacts, error: contactsError } = await supabaseAdmin
       .from("contacts")
-      .select("id, name, phone, tags")
+      .select("id, name, phone")
       .not("status_contato", "in", '("removido","bloqueado")');
 
     if (contactsError) {
@@ -67,14 +67,39 @@ export async function POST(
       );
     }
 
+    // Load contact tags relation
+    const { data: tagsList } = await supabaseAdmin
+      .from("contact_tags")
+      .select("contact_id, tags:tag_id(name)");
+
+    const tagsMap: Record<string, string[]> = {};
+    if (tagsList) {
+      for (const item of tagsList) {
+        if (!item.contact_id) continue;
+        const tagName = (item.tags as any)?.name;
+        if (tagName) {
+          if (!tagsMap[item.contact_id]) {
+            tagsMap[item.contact_id] = [];
+          }
+          tagsMap[item.contact_id].push(tagName);
+        }
+      }
+    }
+
+    // Map tags to contacts in memory
+    const contactsWithTags = allContacts.map((c) => ({
+      ...c,
+      tags: tagsMap[c.id] || [],
+    }));
+
     // Filter contacts by tag
     const tagsFiltro = Array.isArray(campaign.tags_filtro) ? campaign.tags_filtro : [];
     const contacts = tagsFiltro.length > 0
-      ? allContacts.filter((c) => {
+      ? contactsWithTags.filter((c) => {
           const contactTags = Array.isArray(c.tags) ? c.tags : [];
           return tagsFiltro.some((t: string) => contactTags.includes(t));
         })
-      : allContacts;
+      : contactsWithTags;
 
     if (contacts.length === 0) {
       return NextResponse.json(
