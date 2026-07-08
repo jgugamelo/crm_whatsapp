@@ -27,6 +27,8 @@ import {
   PanelRightOpen,
   PanelRightClose,
   Phone,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +112,7 @@ interface MessageThreadProps {
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
   whatsappProvider?: string;
+  onDeleteConversation?: (conversationId: string) => Promise<void>;
 }
 
 function formatDateSeparator(dateStr: string): string {
@@ -169,6 +172,7 @@ export function MessageThread({
   contactPanelOpen,
   onToggleContactPanel,
   whatsappProvider = "meta",
+  onDeleteConversation,
 }: MessageThreadProps) {
   const { user } = useAuth();
   const [voipSession, setVoipSession] = useState<string>("default");
@@ -208,6 +212,7 @@ export function MessageThread({
   // parent's resyncToken); the 700ms spin is just feedback so the click
   // doesn't feel like a no-op. Cleared via the timer ref on unmount.
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     return () => {
@@ -225,6 +230,18 @@ export function MessageThread({
       refreshTimerRef.current = null;
     }, 700);
   }, [isRefreshing, onRefresh]);
+  const handleDeleteClick = useCallback(async () => {
+    if (!conversation || !onDeleteConversation) return;
+    const confirmed = window.confirm("Deseja mesmo excluir esta conversa e todas as suas mensagens?");
+    if (!confirmed) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteConversation(conversation.id);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [conversation, onDeleteConversation]);
+
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
 
   // Profiles are bounded by RLS to rows the current user is allowed to
@@ -978,6 +995,25 @@ export function MessageThread({
               <RefreshCw
                 className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
               />
+            </button>
+          )}
+
+          {onDeleteConversation && conversation && (
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              disabled={isDeleting}
+              aria-label="Deletar conversa"
+              title="Deletar Conversa"
+              className={cn(
+                "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-red-400 disabled:opacity-60",
+              )}
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
             </button>
           )}
 

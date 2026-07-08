@@ -539,6 +539,32 @@ export default function InboxPage() {
     [activeConversation]
   );
 
+  const handleDeleteConversation = useCallback(
+    async (conversationId: string) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("conversations")
+        .delete()
+        .eq("id", conversationId);
+
+      if (error) {
+        toast.error("Erro ao deletar conversa: " + error.message);
+        return;
+      }
+
+      toast.success("Conversa deletada com sucesso!");
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+      setActiveConversation(null);
+      setActiveContact(null);
+      setMessages([]);
+      
+      const params = new URLSearchParams(window.location.search);
+      params.delete("c");
+      router.replace(`${window.location.pathname}?${params.toString()}`);
+    },
+    [router]
+  );
+
   // On mobile (<lg) we show a SINGLE pane — either the list or the
   // thread — rather than cramming both side-by-side. Selecting a
   // conversation slides the thread in; the thread's back button pops
@@ -609,6 +635,7 @@ export default function InboxPage() {
             onRefresh={handleManualRefresh}
             contactPanelOpen={contactPanelOpen}
             onToggleContactPanel={handleToggleContactPanel}
+            onDeleteConversation={handleDeleteConversation}
           />
         </div>
 
