@@ -52,33 +52,43 @@ export async function getWahaSessionStatus(
 }
 
 export async function startWahaSession(config: WahaConfig): Promise<void> {
-  // Try starting the session
-  const res = await wahaFetch(config, '/api/sessions/start', {
+  // 1. Try path-based start endpoint
+  const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/start`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: config.waha_session }),
   });
   if (!res.ok) {
-    // If start endpoint fails, try the session creation POST /api/sessions/
+    // 2. If it's a 404 (session doesn't exist) or 422, try to create/start it via POST /api/sessions
     const createRes = await wahaFetch(config, '/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: config.waha_session }),
     });
-    if (!createRes.ok) {
-      throw new Error(`Failed to start WAHA session: ${createRes.status}`);
+    if (createRes.ok) {
+      // Automatically trigger start in case it's not started automatically
+      await wahaFetch(config, `/api/sessions/${config.waha_session}/start`, {
+        method: 'POST',
+      });
+      return;
     }
+    throw new Error(`Failed to start WAHA session: ${res.status}`);
   }
 }
 
 export async function stopWahaSession(config: WahaConfig): Promise<void> {
-  const res = await wahaFetch(config, '/api/sessions/stop', {
+  // Try path-based stop endpoint
+  const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/stop`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: config.waha_session }),
   });
   if (!res.ok) {
-    throw new Error(`Failed to stop WAHA session: ${res.status}`);
+    // Fall back to legacy stop endpoint
+    const fallbackRes = await wahaFetch(config, '/api/sessions/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: config.waha_session }),
+    });
+    if (!fallbackRes.ok) {
+      throw new Error(`Failed to stop WAHA session: ${res.status}`);
+    }
   }
 }
 
