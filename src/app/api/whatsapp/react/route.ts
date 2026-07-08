@@ -130,12 +130,9 @@ export async function POST(request: Request) {
         waha_api_key: config.waha_api_key ? decrypt(config.waha_api_key) : null,
       };
 
-      const chatId = contact.phone.includes('@') ? contact.phone : `${contact.phone.replace(/\D/g, '')}@c.us`;
-
       try {
         await sendWahaReaction(
           wahaConfig,
-          chatId,
           targetMessage.message_id,
           emoji
         );
