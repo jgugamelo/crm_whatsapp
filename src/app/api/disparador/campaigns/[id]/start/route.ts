@@ -53,8 +53,7 @@ export async function POST(
     // 3. Load active contacts
     const { data: allContacts, error: contactsError } = await supabaseAdmin
       .from("contacts")
-      .select("id, name, phone")
-      .not("status_contato", "in", '("removido","bloqueado")');
+      .select("id, name, phone");
 
     if (contactsError) {
       throw new Error(`Erro ao carregar contatos: ${contactsError.message}`);
