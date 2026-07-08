@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ensureQueueWorkerRunning } from "@/lib/disparador/worker";
 
 // Use admin client to write to the queue bypassing RLS
 const supabaseAdmin = createClient(
@@ -13,6 +14,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    ensureQueueWorkerRunning();
     const { id: campaignId } = await params;
     const now = new Date().toISOString();
 

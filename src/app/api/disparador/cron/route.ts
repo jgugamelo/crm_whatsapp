@@ -5,6 +5,7 @@ import {
   sendWahaTextMessage,
   sendWahaMediaMessage,
 } from "@/lib/whatsapp/waha-api";
+import { ensureQueueWorkerRunning } from "@/lib/disparador/worker";
 
 // Create a Supabase admin client to bypass RLS for background worker processes
 const supabaseAdmin = createClient(
@@ -15,6 +16,7 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: Request) {
   try {
+    ensureQueueWorkerRunning();
     // Basic authorization check (e.g. check for a CRON_SECRET or run anyway)
     const url = new URL(request.url);
     const secret = url.searchParams.get("secret");
