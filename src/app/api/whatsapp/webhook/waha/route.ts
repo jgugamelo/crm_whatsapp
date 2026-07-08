@@ -273,6 +273,12 @@ export async function POST(request: Request) {
             }
 
             const fileUrl = `${config.waha_url}/api/files/${fileKey}`
+            console.log('[waha/webhook] Downloading media:', {
+              url: fileUrl,
+              apiKeyLength: apiKey ? apiKey.length : 0,
+              apiKeySample: apiKey ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}` : 'null',
+              headersKeys: Object.keys(headers)
+            })
             const fileRes = await fetch(fileUrl, { headers })
             if (fileRes.ok) {
               const buffer = await fileRes.arrayBuffer()
