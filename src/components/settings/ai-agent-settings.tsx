@@ -189,15 +189,15 @@ export function AiAgentSettings() {
   // Client-side PDF parser using pdf.js from CDN
   const parsePdfClientSide = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-      if (window["pdfjs-dist/build/pdf"]) {
-        runParser(window["pdfjs-dist/build/pdf"]);
+      if ((window as any)["pdfjs-dist/build/pdf"]) {
+        runParser((window as any)["pdfjs-dist/build/pdf"]);
         return;
       }
 
       const script = document.createElement("script");
       script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js";
       script.onload = () => {
-        const pdfjsLib = window["pdfjs-dist/build/pdf"];
+        const pdfjsLib = (window as any)["pdfjs-dist/build/pdf"];
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
         runParser(pdfjsLib);
       };
