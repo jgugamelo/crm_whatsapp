@@ -737,14 +737,14 @@ export function WhatsAppConfig() {
                     <span className="relative flex h-3 w-3">
                       <span className={`relative inline-flex rounded-full h-3 w-3 ${
                         voipStatus === 'open' ? 'bg-emerald-500 animate-pulse' :
-                        voipStatus === 'qr' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'
+                        (voipStatus === 'qr' || voipStatus === 'SCAN_QR') ? 'bg-amber-500 animate-pulse' : 'bg-red-500'
                       }`}></span>
                     </span>
                     <div>
                       <h4 className="text-sm font-semibold text-foreground">Status do VoIP</h4>
                       <p className="text-xs text-muted-foreground capitalize">
                         {voipStatus === 'open' ? 'Ativo e Conectado' : 
-                         voipStatus === 'qr' ? 'Aguardando QR Code' : 
+                         (voipStatus === 'qr' || voipStatus === 'SCAN_QR') ? 'Aguardando QR Code' : 
                          voipStatus === 'connecting' ? 'Conectando...' :
                          voipStatus === 'NOT_CREATED' ? 'Desativado' : voipStatus}
                       </p>
@@ -765,7 +765,7 @@ export function WhatsAppConfig() {
                 </div>
 
                 {/* VoIP QR Code Container */}
-                {voipStatus === 'qr' && voipQr && (
+                {(voipStatus === 'qr' || voipStatus === 'SCAN_QR') && voipQr && (
                   <div className="flex flex-col items-center justify-center p-6 border border-amber-600/30 bg-amber-950/10 rounded-lg space-y-3">
                     <div className="bg-white p-3 rounded-md">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
