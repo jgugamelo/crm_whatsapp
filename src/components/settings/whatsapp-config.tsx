@@ -259,7 +259,7 @@ export function WhatsAppConfig() {
 
     const interval = setInterval(() => {
       checkWahaStatus();
-      if (sessionStatus === 'SCAN_QR' || sessionStatus === 'STARTING') {
+      if (sessionStatus === 'SCAN_QR' || sessionStatus === 'SCAN_QR_CODE' || sessionStatus === 'STARTING') {
         setQrTrigger((prev) => prev + 1);
       }
     }, 5000);
@@ -689,12 +689,12 @@ export function WhatsAppConfig() {
                     <span className="relative flex h-3 w-3">
                       <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                         sessionStatus === 'WORKING' ? 'bg-emerald-400' :
-                        sessionStatus === 'SCAN_QR' ? 'bg-amber-400' :
+                        (sessionStatus === 'SCAN_QR' || sessionStatus === 'SCAN_QR_CODE') ? 'bg-amber-400' :
                         sessionStatus === 'STARTING' ? 'bg-blue-400' : 'bg-red-400'
                       }`}></span>
                       <span className={`relative inline-flex rounded-full h-3 w-3 ${
                         sessionStatus === 'WORKING' ? 'bg-emerald-500' :
-                        sessionStatus === 'SCAN_QR' ? 'bg-amber-500' :
+                        (sessionStatus === 'SCAN_QR' || sessionStatus === 'SCAN_QR_CODE') ? 'bg-amber-500' :
                         sessionStatus === 'STARTING' ? 'bg-blue-500' : 'bg-red-500'
                       }`}></span>
                     </span>
@@ -736,7 +736,7 @@ export function WhatsAppConfig() {
                 </div>
 
                 {/* QR Code Container */}
-                {sessionStatus === 'SCAN_QR' && (
+                {(sessionStatus === 'SCAN_QR' || sessionStatus === 'SCAN_QR_CODE') && (
                   <div className="grid gap-6 md:grid-cols-2 items-start mt-4">
                     <div className="flex flex-col items-center justify-center p-6 border border-amber-600/30 bg-amber-950/10 rounded-lg space-y-3">
                       <div className="bg-white p-3 rounded-md">
