@@ -336,11 +336,16 @@ export async function POST(request: Request) {
         const rawApiKey = waha_api_key === MASKED_TOKEN && existing
           ? (existing.waha_api_key ? decrypt(existing.waha_api_key) : null)
           : waha_api_key
+
+        const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
+        const protocol = request.headers.get('x-forwarded-proto') || 'https'
+        const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook/waha`
+
         await startWahaSession({
           waha_url,
           waha_session,
           waha_api_key: rawApiKey && rawApiKey !== MASKED_TOKEN ? rawApiKey : null
-        })
+        }, webhookUrl)
       } catch (err) {
         console.warn('Could not auto-start WAHA session:', err)
       }

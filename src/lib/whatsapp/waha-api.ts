@@ -51,26 +51,51 @@ export async function getWahaSessionStatus(
   }
 }
 
-export async function startWahaSession(config: WahaConfig): Promise<void> {
-  // 1. Try path-based start endpoint
-  const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/start`, {
+export async function startWahaSession(config: WahaConfig, webhookUrl?: string): Promise<void> {
+  // If webhookUrl is provided, we stop and delete the session first to recreate it with the webhook config
+  if (webhookUrl) {
+    try {
+      await wahaFetch(config, `/api/sessions/${config.waha_session}/stop`, { method: 'POST' });
+    } catch (e) {}
+    try {
+      await wahaFetch(config, `/api/sessions/${config.waha_session}`, { method: 'DELETE' });
+    } catch (e) {}
+  }
+
+  const sessionPayload: Record<string, any> = { name: config.waha_session };
+  if (webhookUrl) {
+    sessionPayload.config = {
+      webhooks: [
+        {
+          url: webhookUrl,
+          events: ['message', 'message.any', 'message.reaction', 'message.status', 'session.status', 'device.status', 'status'],
+        }
+      ]
+    };
+  }
+
+  const createRes = await wahaFetch(config, '/api/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sessionPayload),
+  });
+
+  if (!createRes.ok) {
+    // If creation fails (e.g. session already exists and shouldn't be deleted), try to start it directly
+    const startRes = await wahaFetch(config, `/api/sessions/${config.waha_session}/start`, {
+      method: 'POST',
+    });
+    if (!startRes.ok) {
+      throw new Error(`Failed to start/create WAHA session: ${createRes.status}`);
+    }
+    return;
+  }
+
+  const startRes = await wahaFetch(config, `/api/sessions/${config.waha_session}/start`, {
     method: 'POST',
   });
-  if (!res.ok) {
-    // 2. If it's a 404 (session doesn't exist) or 422, try to create/start it via POST /api/sessions
-    const createRes = await wahaFetch(config, '/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: config.waha_session }),
-    });
-    if (createRes.ok) {
-      // Automatically trigger start in case it's not started automatically
-      await wahaFetch(config, `/api/sessions/${config.waha_session}/start`, {
-        method: 'POST',
-      });
-      return;
-    }
-    throw new Error(`Failed to start WAHA session: ${res.status}`);
+  if (!startRes.ok) {
+    throw new Error(`Failed to start WAHA session: ${startRes.status}`);
   }
 }
 
