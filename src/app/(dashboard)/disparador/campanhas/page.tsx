@@ -107,13 +107,12 @@ export default function CampanhasPage() {
       // Load Active WAHA Sessions
       const { data: configList } = await supabase
         .from("whatsapp_config")
-        .select("id, waha_session, phone_info")
+        .select("id, waha_session")
         .eq("provider", "waha");
 
       const wahaSessions = (configList ?? []).map((c) => ({
         id: c.id,
         name: c.waha_session || "Sessão WAHA",
-        phone_info: c.phone_info,
       }));
       setSessions(wahaSessions);
     } catch (err) {
