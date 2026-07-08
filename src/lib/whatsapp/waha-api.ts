@@ -68,7 +68,7 @@ export async function startWahaSession(config: WahaConfig, webhookUrl?: string):
       webhooks: [
         {
           url: webhookUrl,
-          events: ['message', 'message.any', 'message.reaction', 'message.status', 'session.status', 'device.status', 'status'],
+          events: ['message', 'message.any', 'message.reaction', 'message.ack', 'message.revoked'],
         }
       ]
     };
