@@ -389,9 +389,17 @@ export async function POST(request: Request) {
         else if (type === 'video') contentType = 'video'
         else if (type === 'audio' || type === 'ptt') contentType = 'audio'
         else if (type === 'document') contentType = 'document'
-        else if (type === 'poll') contentType = 'poll'
+        else if (type === 'poll' || type === 'poll_creation' || type === 'pollCreation') contentType = 'poll'
         else if (type === 'vcard' || type === 'contact') contentType = 'vcard'
         else if (type === 'revoked') contentType = 'revoked'
+      }
+
+      let contentText = textBody || ''
+      if (contentType === 'poll' && !contentText && payload.poll?.name) {
+        contentText = payload.poll.name
+      }
+      if (contentType === 'vcard' && !contentText && payload.vcard?.name) {
+        contentText = payload.vcard.name
       }
 
       const messageDate = new Date(timestamp * 1000).toISOString()
@@ -413,7 +421,7 @@ export async function POST(request: Request) {
           message_id: messageId,
           sender_type: fromMe ? 'agent' : 'customer',
           content_type: contentType,
-          content_text: textBody || '',
+          content_text: contentText,
           media_url: mediaUrl,
           status: direction === 'inbound' ? 'read' : 'sent',
           created_at: messageDate,
