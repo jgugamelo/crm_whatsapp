@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Bot, Loader2, Key, MessageSquare, ToggleLeft } from "lucide-react";
+import { 
+  Bot, 
+  Loader2, 
+  Key, 
+  MessageSquare, 
+  Volume2, 
+  Globe, 
+  FileText, 
+  Trash2, 
+  Upload, 
+  Sparkles 
+} from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -29,16 +40,29 @@ export function AiAgentSettings() {
   const [apiKey, setApiKey] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   
+  // Advanced Features
+  const [googleSearchEnabled, setGoogleSearchEnabled] = useState(false);
+  const [multimodalEnabled, setMultimodalEnabled] = useState(false);
+
+  // ElevenLabs
+  const [elevenlabsEnabled, setElevenlabsEnabled] = useState(false);
+  const [elevenlabsApiKey, setElevenlabsApiKey] = useState("");
+  const [elevenlabsVoiceId, setElevenlabsVoiceId] = useState("");
+
+  // Knowledge Base
+  const [kbFiles, setKbFiles] = useState<{ id: string; name: string; created_at: string }[]>([]);
+  const [uploadingKb, setUploadingKb] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!accountId) return;
     loadConfig();
+    loadKbFiles();
   }, [accountId]);
 
   async function loadConfig() {
-    setLoading(false);
     try {
       const { data, error } = await supabase
         .from("ai_config")
@@ -52,6 +76,11 @@ export function AiAgentSettings() {
         setApiProvider(data.api_provider);
         setApiKey(data.api_key || "");
         setSystemPrompt(data.system_prompt || "");
+        setGoogleSearchEnabled(data.google_search_enabled || false);
+        setMultimodalEnabled(data.multimodal_enabled || false);
+        setElevenlabsEnabled(data.elevenlabs_enabled || false);
+        setElevenlabsApiKey(data.elevenlabs_api_key || "");
+        setElevenlabsVoiceId(data.elevenlabs_voice_id || "");
       }
     } catch (err) {
       console.error("Failed to load AI config:", err);
@@ -61,12 +90,32 @@ export function AiAgentSettings() {
     }
   }
 
+  async function loadKbFiles() {
+    try {
+      const { data, error } = await supabase
+        .from("knowledge_base_files")
+        .select("id, name, created_at")
+        .eq("account_id", accountId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setKbFiles(data || []);
+    } catch (err) {
+      console.error("Failed to load knowledge base files:", err);
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!accountId) return;
 
     if (enabled && apiProvider !== "hermes" && !apiKey.trim()) {
       toast.error("A chave de API é obrigatória para ativar o Agente de IA");
+      return;
+    }
+
+    if (elevenlabsEnabled && (!elevenlabsApiKey.trim() || !elevenlabsVoiceId.trim())) {
+      toast.error("Preencha a API Key e o Voice ID para ativar o ElevenLabs");
       return;
     }
 
@@ -80,6 +129,11 @@ export function AiAgentSettings() {
           api_provider: apiProvider,
           api_key: apiKey.trim(),
           system_prompt: systemPrompt.trim(),
+          google_search_enabled: googleSearchEnabled,
+          multimodal_enabled: multimodalEnabled,
+          elevenlabs_enabled: elevenlabsEnabled,
+          elevenlabs_api_key: elevenlabsApiKey.trim() || null,
+          elevenlabs_voice_id: elevenlabsVoiceId.trim() || null,
           updated_at: new Date().toISOString(),
         }, { onConflict: "account_id" });
 
@@ -90,6 +144,97 @@ export function AiAgentSettings() {
       toast.error("Erro ao salvar configurações do Agente de IA");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleKbUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !accountId) return;
+
+    setUploadingKb(true);
+    try {
+      let content = "";
+      if (file.name.endsWith(".txt") || file.name.endsWith(".csv")) {
+        content = await file.text();
+      } else if (file.name.endsWith(".pdf")) {
+        content = await parsePdfClientSide(file);
+      } else {
+        throw new Error("Formato de arquivo não suportado. Use PDF, TXT ou CSV.");
+      }
+
+      if (!content.trim()) {
+        throw new Error("O arquivo está vazio ou não pôde ser extraído texto.");
+      }
+
+      const { error } = await supabase
+        .from("knowledge_base_files")
+        .insert({
+          account_id: accountId,
+          name: file.name,
+          content: content,
+        });
+
+      if (error) throw error;
+      toast.success("Documento adicionado à base de conhecimento!");
+      loadKbFiles();
+    } catch (err: any) {
+      console.error("Failed to upload file:", err);
+      toast.error(err.message || "Erro ao fazer upload do arquivo");
+    } finally {
+      setUploadingKb(false);
+      e.target.value = "";
+    }
+  }
+
+  // Client-side PDF parser using pdf.js from CDN
+  const parsePdfClientSide = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (window["pdfjs-dist/build/pdf"]) {
+        runParser(window["pdfjs-dist/build/pdf"]);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js";
+      script.onload = () => {
+        const pdfjsLib = window["pdfjs-dist/build/pdf"];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+        runParser(pdfjsLib);
+      };
+      script.onerror = () => reject(new Error("Falha ao carregar biblioteca de leitura de PDF."));
+      document.head.appendChild(script);
+
+      async function runParser(pdfjsLib: any) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          let fullText = "";
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map((item: any) => item.str).join(" ");
+            fullText += pageText + "\n";
+          }
+          resolve(fullText);
+        } catch (err) {
+          reject(err);
+        }
+      }
+    });
+  };
+
+  async function handleKbDelete(id: string) {
+    try {
+      const { error } = await supabase
+        .from("knowledge_base_files")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      toast.success("Documento removido!");
+      loadKbFiles();
+    } catch (err) {
+      console.error("Failed to delete document:", err);
+      toast.error("Erro ao remover documento");
     }
   }
 
@@ -105,10 +250,11 @@ export function AiAgentSettings() {
     <section className="max-w-3xl space-y-6 animate-in fade-in-50 duration-200">
       <SettingsPanelHead
         title="Agente de Atendimento com IA"
-        description="Configure um atendente virtual inteligente para responder automaticamente seus clientes no WhatsApp."
+        description="Configure um atendente virtual inteligente com multicanalidade, base de conhecimento e resposta de voz."
       />
 
       <form onSubmit={handleSave} className="space-y-6">
+        {/* Status Card */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -132,12 +278,13 @@ export function AiAgentSettings() {
             <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
               <MessageSquare className="size-4 shrink-0 text-amber-400" />
               <span>
-                <strong>Nota:</strong> O agente de IA responderá apenas as conversas que <strong>não possuírem</strong> um atendente humano atribuído. Se um atendente assumir o chat, a IA parará de responder automaticamente.
+                <strong>Nota:</strong> O agente de IA responderá apenas as conversas que <strong>não possuírem</strong> um atendente humano atribuído.
               </span>
             </div>
           </CardContent>
         </Card>
 
+        {/* Integration Card */}
         <Card className={!enabled ? "opacity-60" : ""}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-foreground">
@@ -161,11 +308,11 @@ export function AiAgentSettings() {
                   <option value="gemini">Google Gemini (Recomendado)</option>
                   <option value="openai">OpenAI (ChatGPT)</option>
                   <option value="claude">Anthropic Claude</option>
-                  <option value="hermes">Nous Hermes (Modo Billing - Sem Chave)</option>
+                  <option value="hermes">Nous Hermes (Modo Billing)</option>
                 </select>
               </div>
 
-               <div className="space-y-2">
+              <div className="space-y-2">
                 <Label className="text-muted-foreground">Chave de API (API Key)</Label>
                 <Input
                   type="password"
@@ -179,33 +326,16 @@ export function AiAgentSettings() {
                       ? "sk-proj-..."
                       : apiProvider === "claude"
                       ? "sk-ant-..."
-                      : "Opcional (Deixe em branco para usar o billing da plataforma)"
+                      : "Opcional"
                   }
                   className="text-sm placeholder:text-muted-foreground"
                 />
-                {apiProvider === "hermes" && (
-                  <div className="mt-3 space-y-2 border-t border-border/40 pt-2.5">
-                    <p className="text-[10px] text-emerald-400 leading-normal">
-                      <strong>Modo Billing:</strong> Se você deixar o campo de chave em branco, os custos de tokens serão faturados no saldo da plataforma.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground">Quer usar sua própria assinatura?</span>
-                      <a
-                        href="https://portal.nousresearch.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-primary hover:underline flex items-center gap-0.5 font-medium"
-                      >
-                        Fazer Login no Nous Portal ↗
-                      </a>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Behavioral Settings Card */}
         <Card className={!enabled ? "opacity-60" : ""}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-foreground">
@@ -223,16 +353,202 @@ export function AiAgentSettings() {
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 disabled={!enabled || !canEditSettings}
-                rows={8}
-                placeholder={`Você é um assistente virtual atencioso da empresa [Nome].
-Seu objetivo é ajudar os clientes com dúvidas frequentes sobre nossos produtos e serviços.
-Seja sempre simpático, direto e escreva em português do Brasil.`}
+                rows={6}
+                placeholder={`Você é um assistente virtual atencioso da nossa empresa. Seu objetivo é ajudar os clientes.`}
                 className="text-sm font-sans"
               />
             </div>
           </CardContent>
         </Card>
 
+        {/* Advanced Capabilities Card */}
+        <Card className={!enabled ? "opacity-60" : ""}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <Sparkles className="size-4 text-primary" />
+              Recursos Avançados
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Habilite novas capacidades cognitivas e interativas para seu Agente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Google Search Toggle */}
+            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+              <div className="space-y-0.5">
+                <Label className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <Globe className="size-3.5 text-muted-foreground shrink-0" />
+                  Pesquisa no Google (Grounding)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Permite que o agente consulte a internet em tempo real para responder dados atualizados.
+                </p>
+              </div>
+              <Switch
+                checked={googleSearchEnabled}
+                onCheckedChange={setGoogleSearchEnabled}
+                disabled={!enabled || !canEditSettings}
+              />
+            </div>
+
+            {/* Multimodal Cap. Toggle */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <Bot className="size-3.5 text-muted-foreground shrink-0" />
+                  Interpretar Mídia (Áudio e Imagem)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Transcreve automaticamente mensagens de áudio e analisa imagens enviadas pelo cliente.
+                </p>
+              </div>
+              <Switch
+                checked={multimodalEnabled}
+                onCheckedChange={setMultimodalEnabled}
+                disabled={!enabled || !canEditSettings}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ElevenLabs Card */}
+        <Card className={!enabled ? "opacity-60" : ""}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <CardTitle className="flex items-center gap-2 text-foreground">
+                  <Volume2 className="size-4 text-primary" />
+                  Respostas de Voz (ElevenLabs)
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Envie respostas sintetizadas por áudio no WhatsApp sempre que o cliente mandar um áudio.
+                </CardDescription>
+              </div>
+              <Switch
+                checked={elevenlabsEnabled}
+                onCheckedChange={setElevenlabsEnabled}
+                disabled={!enabled || !canEditSettings}
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {elevenlabsEnabled && (
+              <div className="grid gap-4 md:grid-cols-2 animate-in slide-in-from-top-2 duration-200">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">ElevenLabs API Key</Label>
+                  <Input
+                    type="password"
+                    value={elevenlabsApiKey}
+                    onChange={(e) => setElevenlabsApiKey(e.target.value)}
+                    disabled={!canEditSettings}
+                    placeholder="Cole sua API Key do ElevenLabs"
+                    className="text-sm placeholder:text-muted-foreground"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Voice ID</Label>
+                  <Input
+                    type="text"
+                    value={elevenlabsVoiceId}
+                    onChange={(e) => setElevenlabsVoiceId(e.target.value)}
+                    disabled={!canEditSettings}
+                    placeholder="ID da voz (padrão ou clonada)"
+                    className="text-sm placeholder:text-muted-foreground"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* File Search Knowledge Base Card */}
+        <Card className={!enabled ? "opacity-60" : ""}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <FileText className="size-4 text-primary" />
+              Base de Conhecimento (File Search RAG)
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Carregue manuais, tabelas e PDFs para fornecer informações exclusivas de suporte e vendas ao robô.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Upload Area */}
+            <div className="flex items-center gap-4">
+              <Label
+                htmlFor="kb-upload"
+                className={`flex flex-1 cursor-pointer items-center justify-center gap-2.5 rounded-lg border-2 border-dashed border-border p-6 hover:border-primary/50 hover:bg-muted/30 transition duration-150 ${
+                  uploadingKb || !enabled ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {uploadingKb ? (
+                  <>
+                    <Loader2 className="size-5 animate-spin text-primary" />
+                    <span className="text-sm font-medium text-muted-foreground">Extraindo e processando documento...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="size-5 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium text-muted-foreground">Carregar Documento (.pdf, .txt, .csv)</span>
+                  </>
+                )}
+                <input
+                  id="kb-upload"
+                  type="file"
+                  accept=".pdf,.txt,.csv"
+                  onChange={handleKbUpload}
+                  disabled={uploadingKb || !enabled || !canEditSettings}
+                  className="hidden"
+                />
+              </Label>
+            </div>
+
+            {/* Files List */}
+            {kbFiles.length > 0 ? (
+              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3 max-h-52 overflow-y-auto">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Documentos na Base ({kbFiles.length})
+                </p>
+                {kbFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center justify-between rounded border border-border bg-card/60 px-3 py-2 text-xs hover:bg-muted/40 transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="size-4 text-primary/70 shrink-0" />
+                      <span className="font-medium text-foreground truncate max-w-[280px]">
+                        {file.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(file.created_at).toLocaleDateString("pt-BR")}
+                      </span>
+                      {canEditSettings && (
+                        <button
+                          type="button"
+                          onClick={() => handleKbDelete(file.id)}
+                          className="text-muted-foreground hover:text-red-400 p-1 rounded hover:bg-muted cursor-pointer"
+                          title="Remover Documento"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-6 border border-dashed border-border/60 rounded-lg bg-muted/10 text-center">
+                <FileText className="size-6 text-muted-foreground/45 mb-1.5" />
+                <p className="text-xs text-muted-foreground">Sua base de conhecimento está vazia.</p>
+                <p className="text-[10px] text-muted-foreground/70 mt-0.5">Faça upload de arquivos acima para o robô poder consultá-los.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Submit button */}
         {canEditSettings && (
           <Button
             type="submit"

@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { decrypt } from "@/lib/whatsapp/encryption";
-import { sendTextMessage } from "@/lib/whatsapp/meta-api";
-import { sendWahaTextMessage } from "@/lib/whatsapp/waha-api";
+import { sendTextMessage, sendMediaMessage } from "@/lib/whatsapp/meta-api";
+import { sendWahaTextMessage, sendWahaMediaMessage } from "@/lib/whatsapp/waha-api";
 import {
   sanitizePhoneForMeta,
   phoneVariants,
@@ -40,7 +40,7 @@ export async function handleAiAutoResponse(
   // 2. Load recent conversation history (last 10 messages)
   const { data: messages, error: messagesError } = await db
     .from("messages")
-    .select("content_text, created_at, sender_type")
+    .select("id, content_text, content_type, media_url, created_at, sender_type")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -53,8 +53,6 @@ export async function handleAiAutoResponse(
   // Order chronologically for the LLM
   const history = (messages || []).reverse();
 
-  // 3. Generate response using chosen LLM API
-  let generatedText = "";
   const configKey = aiConfig.api_key?.trim();
 
   let masterKey = "";
@@ -75,29 +73,112 @@ export async function handleAiAutoResponse(
     return;
   }
 
+  // 3. Audio Message Transcription (Whisper)
+  let incomingWasAudio = false;
+  const lastMsg = history[history.length - 1];
+
+  if (lastMsg && lastMsg.content_type === "audio" && lastMsg.media_url && aiConfig.multimodal_enabled) {
+    incomingWasAudio = true;
+    let whisperKey = aiConfig.api_provider === "openai" ? activeKey : (process.env.OPENAI_API_KEY || "");
+
+    if (whisperKey) {
+      try {
+        console.log("[AI Agent] Transcribing audio with Whisper...", lastMsg.media_url);
+        let fetchUrl = lastMsg.media_url;
+        if (!fetchUrl.startsWith("http")) {
+          const { data: publicUrlData } = db.storage.from("chat-media").getPublicUrl(fetchUrl);
+          fetchUrl = publicUrlData.publicUrl;
+        }
+
+        const audioRes = await fetch(fetchUrl);
+        if (audioRes.ok) {
+          const arrayBuffer = await audioRes.arrayBuffer();
+          const formData = new FormData();
+          const blob = new Blob([arrayBuffer], { type: "audio/ogg" });
+          formData.append("file", blob, "audio.ogg");
+          formData.append("model", "whisper-1");
+          formData.append("language", "pt");
+
+          const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${whisperKey}`,
+            },
+            body: formData,
+          });
+
+          if (whisperRes.ok) {
+            const whisperData = await whisperRes.json();
+            if (whisperData.text) {
+              const transcribedText = whisperData.text;
+              console.log("[AI Agent] Whisper transcribed:", transcribedText);
+              
+              // Update local history
+              lastMsg.content_text = transcribedText;
+              incomingText = transcribedText;
+              
+              // Update in database so it shows up in CRM chat
+              await db
+                .from("messages")
+                .update({ content_text: `🎙️ _Áudio transcrito:_ "${transcribedText}"` })
+                .eq("id", lastMsg.id);
+            }
+          } else {
+            console.error("[AI Agent] Whisper API error:", await whisperRes.text());
+          }
+        }
+      } catch (err) {
+        console.error("[AI Agent] Whisper error:", err);
+      }
+    }
+  }
+
+  // 4. Load Knowledge Base (File Search RAG) Context
+  const { data: kbFiles } = await db
+    .from("knowledge_base_files")
+    .select("name, content")
+    .eq("account_id", accountId);
+
+  let systemPromptWithKb = aiConfig.system_prompt || "Você é um assistente virtual.";
+  if (kbFiles && kbFiles.length > 0) {
+    const kbContext = kbFiles
+      .map((file) => `[ARQUIVO: ${file.name}]\n${file.content}\n---`)
+      .join("\n\n");
+    
+    systemPromptWithKb = `${systemPromptWithKb}
+
+=== BASE DE CONHECIMENTO DISPONÍVEL ===
+${kbContext}
+=== FIM DA BASE DE CONHECIMENTO ===
+
+Use as informações da base de conhecimento acima para responder às dúvidas do cliente com a maior precisão possível. Se a informação não estiver na base, aja de acordo com suas instruções normais.`;
+  }
+
+  // 5. Generate response using chosen LLM API
+  let generatedText = "";
   try {
     if (aiConfig.api_provider === "openai") {
       generatedText = await generateOpenAiResponse(
         activeKey,
-        aiConfig.system_prompt || "Você é um assistente virtual.",
+        systemPromptWithKb,
         history
       );
     } else if (aiConfig.api_provider === "claude") {
       generatedText = await generateClaudeResponse(
         activeKey,
-        aiConfig.system_prompt || "Você é um assistente virtual.",
+        systemPromptWithKb,
         history
       );
     } else if (aiConfig.api_provider === "hermes") {
       generatedText = await generateHermesResponse(
         activeKey,
-        aiConfig.system_prompt || "Você é um assistente virtual.",
+        systemPromptWithKb,
         history
       );
     } else {
       generatedText = await generateGeminiResponse(
         activeKey,
-        aiConfig.system_prompt || "Você é um assistente virtual.",
+        systemPromptWithKb,
         history
       );
     }
@@ -109,7 +190,57 @@ export async function handleAiAutoResponse(
   generatedText = generatedText.trim();
   if (!generatedText) return;
 
-  // 4. Load WhatsApp configuration
+  // 6. Voice Reply Generation (ElevenLabs)
+  let voiceMediaUrl = "";
+  if (incomingWasAudio && aiConfig.elevenlabs_enabled && aiConfig.elevenlabs_api_key && aiConfig.elevenlabs_voice_id) {
+    try {
+      console.log("[AI Agent] Generating voice reply with ElevenLabs...");
+      const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${aiConfig.elevenlabs_voice_id}`;
+      const ttsRes = await fetch(ttsUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "xi-api-key": aiConfig.elevenlabs_api_key,
+        },
+        body: JSON.stringify({
+          text: generatedText,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          },
+        }),
+      });
+
+      if (ttsRes.ok) {
+        const audioBuffer = await ttsRes.arrayBuffer();
+        const filename = `voice-reply-${Date.now()}.mp3`;
+        const storagePath = `account-${accountId}/${filename}`;
+
+        const { error: uploadError } = await db.storage
+          .from("chat-media")
+          .upload(storagePath, Buffer.from(audioBuffer), {
+            contentType: "audio/mpeg",
+            cacheControl: "31536000",
+            upsert: true,
+          });
+
+        if (!uploadError) {
+          const { data: publicUrlData } = db.storage.from("chat-media").getPublicUrl(storagePath);
+          voiceMediaUrl = publicUrlData.publicUrl;
+          console.log("[AI Agent] Voice reply generated and uploaded:", voiceMediaUrl);
+        } else {
+          console.error("[AI Agent] Failed to upload ElevenLabs audio to Storage:", uploadError.message);
+        }
+      } else {
+        console.error("[AI Agent] ElevenLabs TTS API failed:", await ttsRes.text());
+      }
+    } catch (err) {
+      console.error("[AI Agent] ElevenLabs error:", err);
+    }
+  }
+
+  // 7. Load WhatsApp configuration
   const { data: config, error: configError } = await db
     .from("whatsapp_config")
     .select("*")
@@ -144,20 +275,36 @@ export async function handleAiAutoResponse(
     : null;
   const accessToken = isWaha ? "" : decrypt(config.access_token);
 
-  // 5. Send message via WAHA or Meta
+  // 8. Send message via WAHA or Meta
   for (const variant of variants) {
     try {
       if (isWaha) {
-        const result = await sendWahaTextMessage(wahaConfig!, variant, generatedText);
-        sentMessageId = result.messageId;
+        if (voiceMediaUrl) {
+          const result = await sendWahaMediaMessage(wahaConfig!, variant, voiceMediaUrl, "audio", "voice.mp3");
+          sentMessageId = result.messageId;
+        } else {
+          const result = await sendWahaTextMessage(wahaConfig!, variant, generatedText);
+          sentMessageId = result.messageId;
+        }
       } else {
-        const result = await sendTextMessage({
-          phoneNumberId: config.phone_number_id,
-          accessToken,
-          to: variant,
-          text: generatedText,
-        });
-        sentMessageId = result.messageId;
+        if (voiceMediaUrl) {
+          const result = await sendMediaMessage({
+            phoneNumberId: config.phone_number_id,
+            accessToken,
+            to: variant,
+            kind: "audio",
+            link: voiceMediaUrl,
+          });
+          sentMessageId = result.messageId;
+        } else {
+          const result = await sendTextMessage({
+            phoneNumberId: config.phone_number_id,
+            accessToken,
+            to: variant,
+            text: generatedText,
+          });
+          sentMessageId = result.messageId;
+        }
       }
       workingPhone = variant;
       break;
@@ -180,7 +327,7 @@ export async function handleAiAutoResponse(
     await db.from("contacts").update({ phone: workingPhone }).eq("id", contactId);
   }
 
-  // 6. Save sent message to database
+  // 9. Save sent message to database
   const messageDate = new Date().toISOString();
   const { error: newMsgErr } = await db
     .from("messages")
@@ -188,8 +335,9 @@ export async function handleAiAutoResponse(
       account_id: accountId,
       conversation_id: conversationId,
       message_id: sentMessageId,
-      content_type: "text",
+      content_type: voiceMediaUrl ? "audio" : "text",
       content_text: generatedText,
+      media_url: voiceMediaUrl || null,
       status: "sent",
       sender_type: "bot",
       created_at: messageDate,
@@ -200,11 +348,11 @@ export async function handleAiAutoResponse(
     return;
   }
 
-  // 7. Update conversation values
+  // 10. Update conversation values
   await db
     .from("conversations")
     .update({
-      last_message_text: generatedText,
+      last_message_text: voiceMediaUrl ? "🎙️ [Áudio de Voz]" : generatedText,
       last_message_at: messageDate,
       updated_at: new Date().toISOString(),
     })
@@ -223,6 +371,45 @@ async function generateGeminiResponse(
 
   for (const msg of history) {
     const isCustomer = msg.sender_type === "customer";
+    
+    // Multi-modal image handler
+    if (msg.content_type === "image" && msg.media_url) {
+      try {
+        let fetchUrl = msg.media_url;
+        if (!fetchUrl.startsWith("http")) {
+          const { data: publicUrlData } = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { db: { schema: 'wacrm' } }
+          ).storage.from("chat-media").getPublicUrl(fetchUrl);
+          fetchUrl = publicUrlData.publicUrl;
+        }
+
+        const imgRes = await fetch(fetchUrl);
+        if (imgRes.ok) {
+          const buffer = await imgRes.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString("base64");
+          const mimeType = imgRes.headers.get("content-type") || "image/jpeg";
+          
+          contents.push({
+            role: isCustomer ? "user" : "model",
+            parts: [
+              { text: msg.content_text || "O que está nesta imagem?" },
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64
+                }
+              }
+            ],
+          });
+          continue;
+        }
+      } catch (err) {
+        console.error("[AI Agent] Gemini failed to load image:", err);
+      }
+    }
+
     contents.push({
       role: isCustomer ? "user" : "model",
       parts: [{ text: msg.content_text || "" }],
@@ -271,10 +458,32 @@ async function generateOpenAiResponse(
 
   for (const msg of history) {
     const isCustomer = msg.sender_type === "customer";
-    messages.push({
-      role: isCustomer ? "user" : "assistant",
-      content: msg.content_text || "",
-    });
+    
+    // Multi-modal image handler
+    if (msg.content_type === "image" && msg.media_url) {
+      let fetchUrl = msg.media_url;
+      if (!fetchUrl.startsWith("http")) {
+        const { data: publicUrlData } = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { db: { schema: 'wacrm' } }
+        ).storage.from("chat-media").getPublicUrl(fetchUrl);
+        fetchUrl = publicUrlData.publicUrl;
+      }
+
+      messages.push({
+        role: isCustomer ? "user" : "assistant",
+        content: [
+          { type: "text", text: msg.content_text || "O que está nesta imagem?" },
+          { type: "image_url", image_url: { url: fetchUrl } }
+        ]
+      });
+    } else {
+      messages.push({
+        role: isCustomer ? "user" : "assistant",
+        content: msg.content_text || "",
+      });
+    }
   }
 
   const response = await fetch(url, {
