@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     // 2. Incoming and outgoing message synchronization
     // ============================================================
     if (event === 'message.any') {
-      console.log('[waha/webhook] Message payload:', JSON.stringify(payload))
+      console.log('[waha/webhook] Message event received. Payload:', JSON.stringify(payload))
       const { id: messageId, timestamp, from, to, body: textBody, fromMe, hasMedia, type, chatId } = payload
       
       let participantJid = fromMe ? to : from
@@ -396,6 +396,15 @@ export async function POST(request: Request) {
 
       const messageDate = new Date(timestamp * 1000).toISOString()
 
+      console.log('[waha/webhook] Attempting to insert message in DB:', {
+        conversation_id: conversationId,
+        message_id: messageId,
+        sender_type: fromMe ? 'agent' : 'customer',
+        content_type: contentType,
+        media_url: mediaUrl,
+        created_at: messageDate,
+      })
+
       // 3. Insert the message record
       const { error: msgInsertError } = await db
         .from('messages')
@@ -411,8 +420,8 @@ export async function POST(request: Request) {
         })
 
       if (msgInsertError) {
-        console.error('[waha/webhook] Failed to insert message:', msgInsertError)
-        return NextResponse.json({ error: 'Failed to insert message' }, { status: 500 })
+        console.error('[waha/webhook] Failed to insert message database error:', JSON.stringify(msgInsertError))
+        return NextResponse.json({ error: 'Failed to insert message', details: msgInsertError.message }, { status: 500 })
       }
 
       // 4. Update the conversation values
