@@ -770,7 +770,7 @@ export function WhatsAppConfig() {
                       <form onSubmit={handleRequestPairingCode} className="flex gap-2 items-end">
                         <div className="flex-1 space-y-1.5">
                           <Label htmlFor="pairing-phone" className="text-xs text-muted-foreground">
-                            Número do WhatsApp
+                            Número do WhatsApp (com código do país)
                           </Label>
                           <Input
                             id="pairing-phone"
@@ -780,6 +780,9 @@ export function WhatsAppConfig() {
                             disabled={pairingLoading}
                             className="bg-background border-border text-sm h-9"
                           />
+                          <p className="text-[10px] text-amber-400 font-medium">
+                            ⚠️ Digite o número completo incluindo o código do país (ex: 55 para o Brasil).
+                          </p>
                         </div>
                         <Button 
                           type="submit" 
