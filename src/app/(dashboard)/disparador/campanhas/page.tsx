@@ -88,6 +88,29 @@ export default function CampanhasPage() {
     loadData();
   }, []);
 
+  // Poll campaigns periodically if any campaign is in execution
+  useEffect(() => {
+    const hasActiveCampaign = campaigns.some((c) => c.status === "em_execucao");
+    if (!hasActiveCampaign) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const supabase = createClient();
+        const { data: campaignList } = await supabase
+          .from("campaigns")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (campaignList) {
+          setCampaigns(campaignList);
+        }
+      } catch (err) {
+        console.error("Failed to auto-reload campaigns:", err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [campaigns]);
+
   const loadData = async () => {
     setLoading(true);
     try {
