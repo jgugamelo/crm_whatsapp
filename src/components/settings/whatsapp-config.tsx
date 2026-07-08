@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Server,
   Settings,
+  Key,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -79,6 +80,12 @@ export function WhatsAppConfig() {
   const [voipQr, setVoipQr] = useState<string>('');
   const [voipLoading, setVoipLoading] = useState(false);
 
+  // Pairing Code States
+  const [pairingPhone, setPairingPhone] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
+  const [pairingLoading, setPairingLoading] = useState(false);
+  const [pairingError, setPairingError] = useState<string | null>(null);
+
   // Meta specific checks
   const isRegistered = Boolean(config?.registered_at);
   const lastRegistrationError = config?.last_registration_error ?? null;
@@ -103,6 +110,37 @@ export function WhatsAppConfig() {
     typeof window !== 'undefined'
       ? `${window.location.origin}/api/whatsapp/webhook/waha`
       : '';
+
+  const handleRequestPairingCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pairingPhone) return;
+    setPairingLoading(true);
+    setPairingError(null);
+    setPairingCode('');
+
+    try {
+      const res = await fetch('/api/whatsapp/waha/pairing-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phoneNumber: pairingPhone }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to request pairing code');
+      }
+
+      setPairingCode(data.code);
+      toast.success('Código de pareamento gerado!');
+    } catch (err: any) {
+      setPairingError(err.message || 'Failed to generate code');
+      toast.error(err.message || 'Erro ao gerar código');
+    } finally {
+      setPairingLoading(false);
+    }
+  };
 
   const checkWahaStatus = useCallback(async () => {
     if (!accountId) return;
@@ -699,20 +737,76 @@ export function WhatsAppConfig() {
 
                 {/* QR Code Container */}
                 {sessionStatus === 'SCAN_QR' && (
-                  <div className="flex flex-col items-center justify-center p-6 border border-amber-600/30 bg-amber-950/10 rounded-lg space-y-3">
-                    <div className="bg-white p-3 rounded-md">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/whatsapp/waha/qr?t=${qrTrigger}`}
-                        alt="WhatsApp WAHA QR Code"
-                        className="w-48 h-48"
-                      />
+                  <div className="grid gap-6 md:grid-cols-2 items-start mt-4">
+                    <div className="flex flex-col items-center justify-center p-6 border border-amber-600/30 bg-amber-950/10 rounded-lg space-y-3">
+                      <div className="bg-white p-3 rounded-md">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`/api/whatsapp/waha/qr?t=${qrTrigger}`}
+                          alt="WhatsApp WAHA QR Code"
+                          className="w-48 h-48"
+                        />
+                      </div>
+                      <div className="text-center">
+                        <h5 className="text-sm font-semibold text-amber-200">Scan QR Code</h5>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
+                          Scan this QR code using WhatsApp on your phone (Linked Devices &gt; Link a Device) to authorize the session.
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <h5 className="text-sm font-semibold text-amber-200">Scan QR Code</h5>
-                      <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
-                        Scan this QR code using WhatsApp on your phone (Linked Devices &gt; Link a Device) to authorize the session.
-                      </p>
+
+                    {/* Pairing Code Section */}
+                    <div className="border border-border rounded-lg p-5 bg-muted/20 space-y-4">
+                      <div className="flex flex-col space-y-1">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Key className="size-4 text-primary" />
+                          Pareamento por Código
+                        </h4>
+                        <p className="text-xs text-muted-foreground">
+                          Se preferir parear digitando um código no celular em vez de escanear o QR Code, digite o número do celular abaixo.
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleRequestPairingCode} className="flex gap-2 items-end">
+                        <div className="flex-1 space-y-1.5">
+                          <Label htmlFor="pairing-phone" className="text-xs text-muted-foreground">
+                            Número do WhatsApp
+                          </Label>
+                          <Input
+                            id="pairing-phone"
+                            placeholder="Ex: 5521999999999"
+                            value={pairingPhone}
+                            onChange={(e) => setPairingPhone(e.target.value)}
+                            disabled={pairingLoading}
+                            className="bg-background border-border text-sm h-9"
+                          />
+                        </div>
+                        <Button 
+                          type="submit" 
+                          disabled={pairingLoading || !pairingPhone}
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground h-9 font-medium text-xs px-3"
+                        >
+                          {pairingLoading ? 'Gerando...' : 'Gerar Código'}
+                        </Button>
+                      </form>
+
+                      {pairingError && (
+                        <p className="text-xs text-red-400">{pairingError}</p>
+                      )}
+
+                      {pairingCode && (
+                        <div className="flex flex-col items-center justify-center p-4 bg-primary/10 border border-primary/20 rounded-lg text-center space-y-2">
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                            Código de Pareamento
+                          </p>
+                          <p className="text-3xl font-mono font-bold text-primary tracking-widest select-all">
+                            {pairingCode}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground max-w-[240px] mt-1">
+                            No seu celular, vá em <strong>Aparelhos Conectados &gt; Conectar com número de telefone</strong> e digite o código acima.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

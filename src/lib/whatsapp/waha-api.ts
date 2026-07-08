@@ -190,3 +190,30 @@ export async function getWahaProfilePicture(
   }
 }
 
+export async function requestWahaPairingCode(
+  config: WahaConfig,
+  phoneNumber: string
+): Promise<{ code: string }> {
+  const res = await wahaFetch(
+    config,
+    `/api/${config.waha_session}/auth/request-code`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ phoneNumber }),
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to request pairing code: ${res.status} - ${errorText}`);
+  }
+
+  const data = await res.json();
+  return {
+    code: data.code || '',
+  };
+}
+
