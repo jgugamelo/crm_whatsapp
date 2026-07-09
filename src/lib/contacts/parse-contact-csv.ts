@@ -39,25 +39,66 @@ export interface ParseContactCsvResult {
   hasCompanyColumn: boolean;
 }
 
+/** 
+ * Automatically clean and prefix phone numbers, especially for Brazil:
+ * - If 10 or 11 digits (e.g. 21999999999), prepends 55 (Brazil).
+ * - Always returns normalized E.164 with '+' prefix.
+ */
+export function smartNormalizePhone(phone: string): string {
+  let cleaned = phone.replace(/\D/g, '');
+  if (!cleaned) return '';
+  
+  if (cleaned.startsWith('00')) {
+    cleaned = cleaned.slice(2);
+  }
+  
+  // If it is 10 or 11 digits, and starts with a valid Brazilian DDD (11 to 99)
+  if (cleaned.length === 10 || cleaned.length === 11) {
+    const ddd = parseInt(cleaned.slice(0, 2), 10);
+    if (ddd >= 11 && ddd <= 99) {
+      cleaned = '55' + cleaned;
+    }
+  }
+  
+  return '+' + cleaned;
+}
+
 export function parseContactCsv(text: string): ParseContactCsvResult {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) {
     return { rows: [], hasTagsColumn: false, hasCompanyColumn: false };
   }
 
-  const headers = lines[0]
-    .split(',')
+  // Auto-detect delimiter: comma vs semicolon (semicolon is very common in Excel exports in Brazil/Europe)
+  const firstLine = lines[0];
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semicolonCount = (firstLine.match(/;/g) || []).length;
+  const delimiter = semicolonCount > commaCount ? ';' : ',';
+
+  const headers = firstLine
+    .split(delimiter)
     .map((h) => h.trim().toLowerCase().replace(/["']/g, ''));
 
-  const phoneIdx = headers.indexOf('phone');
+  // Multi-language aliases to match columns gracefully
+  const phoneAliases = ['phone', 'telefone', 'tel', 'celular', 'numero', 'número', 'whatsapp', 'whats', 'contato', 'contact'];
+  const nameAliases = ['name', 'nome', 'fullname', 'nome completo', 'cliente'];
+  const emailAliases = ['email', 'e-mail', 'mail', 'correio'];
+  const companyAliases = ['company', 'company_name', 'empresa', 'razão social', 'corporação'];
+  const tagsAliases = ['tags', 'tag', 'etiquetas', 'etiqueta', 'categoria', 'categorias', 'grupos', 'grupo'];
+
+  const findHeaderIndex = (aliases: string[]) => {
+    return headers.findIndex((h) => aliases.includes(h));
+  };
+
+  const phoneIdx = findHeaderIndex(phoneAliases);
   if (phoneIdx === -1) {
     return { rows: [], hasTagsColumn: false, hasCompanyColumn: false };
   }
 
-  const nameIdx = headers.indexOf('name');
-  const emailIdx = headers.indexOf('email');
-  const companyIdx = headers.indexOf('company');
-  const tagsIdx = headers.indexOf('tags');
+  const nameIdx = findHeaderIndex(nameAliases);
+  const emailIdx = findHeaderIndex(emailAliases);
+  const companyIdx = findHeaderIndex(companyAliases);
+  const tagsIdx = findHeaderIndex(tagsAliases);
 
   const rows: ParsedContactRow[] = [];
 
@@ -65,9 +106,12 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     const line = lines[i].trim();
     if (!line) continue;
 
-    const values = parseCsvLine(line);
-    const phone = values[phoneIdx]?.replace(/["']/g, '').trim();
-    if (!phone) continue;
+    const values = parseCsvLine(line, delimiter);
+    const rawPhone = values[phoneIdx]?.replace(/["']/g, '').trim();
+    if (!rawPhone) continue;
+
+    const phone = smartNormalizePhone(rawPhone);
+    if (!phone || phone === '+') continue;
 
     rows.push({
       phone,
@@ -95,8 +139,8 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   };
 }
 
-/** Simple CSV line parse (handles quoted fields). */
-function parseCsvLine(line: string): string[] {
+/** Simple CSV line parse (handles quoted fields and dynamic delimiters). */
+function parseCsvLine(line: string, delimiter: string = ','): string[] {
   const values: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -104,7 +148,7 @@ function parseCsvLine(line: string): string[] {
   for (const char of line) {
     if (char === '"') {
       inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       values.push(current.trim());
       current = '';
     } else {
