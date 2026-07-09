@@ -426,7 +426,7 @@ export async function loadAiAnalytics(db: DB): Promise<AiAnalyticsData> {
   for (const row of (deals.data ?? []) as { status: string }[]) {
     if (row.status === 'won') conversion.won++;
     else if (row.status === 'lost') conversion.lost++;
-    else if (row.status === 'open') conversion.open++;
+    else conversion.open++; // Fallback for 'active' or any other open status
   }
   conversion.total = conversion.won + conversion.lost + conversion.open;
   const closedCount = conversion.won + conversion.lost;
