@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import Link from "next/link";
+import { uploadAccountMedia } from "@/lib/storage/upload-media";
 
 interface Campaign {
   id: string;
@@ -604,17 +605,50 @@ export default function CampanhasPage() {
 
                     {msg.tipo === "imagem" && (
                       <div className="space-y-2">
-                        <input
-                          type="text"
-                          value={msg.url}
-                          onChange={(e) => {
-                            const updated = [...mensagens];
-                            updated[i].url = e.target.value;
-                            setMensagens(updated);
-                          }}
-                          placeholder="Link da imagem (URL)..."
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={msg.url}
+                            onChange={(e) => {
+                              const updated = [...mensagens];
+                              updated[i].url = e.target.value;
+                              setMensagens(updated);
+                            }}
+                            placeholder="Link da imagem (URL)..."
+                            className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="text-xs shrink-0"
+                            onClick={() => {
+                              const el = document.getElementById(`file-upload-${i}`);
+                              if (el) el.click();
+                            }}
+                          >
+                            Upload
+                          </Button>
+                          <input
+                            id={`file-upload-${i}`}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const toastId = toast.loading("Enviando imagem...");
+                              try {
+                                const res = await uploadAccountMedia("chat-media", file);
+                                const updated = [...mensagens];
+                                updated[i].url = res.publicUrl;
+                                setMensagens(updated);
+                                toast.success("Imagem enviada com sucesso!", { id: toastId });
+                              } catch (err: any) {
+                                toast.error(`Erro no upload: ${err.message}`, { id: toastId });
+                              }
+                            }}
+                          />
+                        </div>
                         <input
                           type="text"
                           value={msg.conteudo}
@@ -631,17 +665,50 @@ export default function CampanhasPage() {
 
                     {(msg.tipo === "audio" || msg.tipo === "ligacao") && (
                       <div className="space-y-2">
-                        <input
-                          type="text"
-                          value={msg.url || ""}
-                          onChange={(e) => {
-                            const updated = [...mensagens];
-                            updated[i].url = e.target.value;
-                            setMensagens(updated);
-                          }}
-                          placeholder={msg.tipo === "ligacao" ? "Link do áudio WAV/MP3 da ligação (16kHz mono recomendado)..." : "Link do áudio OGG/MP3 da mensagem..."}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={msg.url || ""}
+                            onChange={(e) => {
+                              const updated = [...mensagens];
+                              updated[i].url = e.target.value;
+                              setMensagens(updated);
+                            }}
+                            placeholder={msg.tipo === "ligacao" ? "Link do áudio WAV/MP3 da ligação (16kHz mono)..." : "Link do áudio OGG/MP3 da mensagem..."}
+                            className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="text-xs shrink-0"
+                            onClick={() => {
+                              const el = document.getElementById(`file-upload-${i}`);
+                              if (el) el.click();
+                            }}
+                          >
+                            Upload
+                          </Button>
+                          <input
+                            id={`file-upload-${i}`}
+                            type="file"
+                            accept={msg.tipo === "ligacao" ? "audio/wav,audio/mpeg,audio/mp3" : "audio/ogg,audio/mpeg,audio/mp3,audio/wav"}
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const toastId = toast.loading("Enviando áudio...");
+                              try {
+                                const res = await uploadAccountMedia("chat-media", file);
+                                const updated = [...mensagens];
+                                updated[i].url = res.publicUrl;
+                                setMensagens(updated);
+                                toast.success("Áudio enviado com sucesso!", { id: toastId });
+                              } catch (err: any) {
+                                toast.error(`Erro no upload: ${err.message}`, { id: toastId });
+                              }
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
