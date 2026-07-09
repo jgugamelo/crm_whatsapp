@@ -111,7 +111,14 @@ export function ConversationList({
   }, [resyncToken]);
 
   const filtered = useMemo(() => {
-    let result = conversations;
+    let result = [...conversations];
+
+    // Sort by last_message_at descending (newest messages first)
+    result.sort((a, b) => {
+      const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return timeB - timeA;
+    });
 
     if (filter === "unread") {
       result = result.filter((c) => c.unread_count > 0);
