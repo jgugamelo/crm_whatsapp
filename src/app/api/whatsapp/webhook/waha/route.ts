@@ -373,9 +373,27 @@ export async function POST(request: Request) {
       // Map WAHA message types to CRM content_type.
       // Use mimetype-based classification if media details are available,
       // fallback to type-based mapping.
+      const hasPollStructure = payload._data?.Message?.pollCreationMessage || 
+                               payload._data?.Message?.pollCreationMessageV2 || 
+                               payload._data?.Message?.pollCreationMessageV3 || 
+                               payload.poll
+
+      const hasVcardStructure = payload._data?.Message?.contactMessage || 
+                                payload._data?.Message?.contactsArrayMessage || 
+                                payload.vcard || 
+                                (payload.vCards && payload.vCards.length > 0) ||
+                                payload._data?.Info?.MediaType === 'vcard'
+
       const rawType = type || payload._data?.Info?.Type || ''
       let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'poll' | 'vcard' | 'revoked' = 'text'
-      if (mediaInfo) {
+
+      if (hasPollStructure || rawType === 'poll' || rawType === 'poll_creation' || rawType === 'pollCreation') {
+        contentType = 'poll'
+      } else if (hasVcardStructure || rawType === 'vcard' || rawType === 'contact') {
+        contentType = 'vcard'
+      } else if (rawType === 'revoked') {
+        contentType = 'revoked'
+      } else if (mediaInfo) {
         const mime = mediaInfo.mimetype || mediaInfo.mime_type || ''
         if (mime.startsWith('image/')) {
           contentType = rawType === 'sticker' ? 'sticker' : 'image'
@@ -390,9 +408,6 @@ export async function POST(request: Request) {
         else if (rawType === 'video') contentType = 'video'
         else if (rawType === 'audio' || rawType === 'ptt') contentType = 'audio'
         else if (rawType === 'document') contentType = 'document'
-        else if (rawType === 'poll' || rawType === 'poll_creation' || rawType === 'pollCreation') contentType = 'poll'
-        else if (rawType === 'vcard' || rawType === 'contact') contentType = 'vcard'
-        else if (rawType === 'revoked') contentType = 'revoked'
       }
 
       let contentText = textBody || ''
@@ -413,6 +428,11 @@ export async function POST(request: Request) {
           contentText = contactMsg.name
         } else if (payload._data?.Message?.contactsArrayMessage?.contacts?.[0]?.displayName) {
           contentText = payload._data.Message.contactsArrayMessage.contacts[0].displayName
+        } else if (payload.vCards && payload.vCards.length > 0) {
+          const fnMatch = payload.vCards[0].match(/FN:(.+)/)
+          if (fnMatch) {
+            contentText = fnMatch[1].trim()
+          }
         }
       }
 
