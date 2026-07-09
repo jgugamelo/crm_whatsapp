@@ -25,6 +25,7 @@ import {
   X,
   Zap,
   Bot,
+  HelpCircle,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
 import { DdmLogo } from "@/components/ui/ddm-logo";
@@ -100,6 +101,7 @@ const navItems: NavItem[] = [
 ];
 
 const bottomNavItems = [
+  { href: "/ajuda", label: "Central de Ajuda", icon: HelpCircle },
   { href: "/settings", label: "Configurações", icon: Settings },
 ];
 
