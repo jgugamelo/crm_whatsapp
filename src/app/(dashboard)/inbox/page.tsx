@@ -649,6 +649,19 @@ export default function InboxPage() {
               contact={activeContact}
               conversation={activeConversation}
               onUpdateConversation={handleUpdateActiveConversation}
+              onUpdateContact={(updatedContact) => {
+                setActiveContact(updatedContact);
+                setConversations((prev) =>
+                  prev.map((c) =>
+                    c.contact_id === updatedContact.id
+                      ? { ...c, contact: { ...c.contact, ...updatedContact } }
+                      : c
+                  )
+                );
+                setActiveConversation((prev) =>
+                  prev ? { ...prev, contact: { ...prev.contact, ...updatedContact } } : null
+                );
+              }}
             />
           </div>
         )}

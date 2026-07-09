@@ -21,17 +21,20 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Contact, Deal, ContactNote, Tag, Conversation } from "@/types";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 interface ContactSidebarProps {
   contact: Contact | null;
   conversation: Conversation | null;
   onUpdateConversation?: (updates: Partial<Conversation>) => void;
+  onUpdateContact?: (contact: Contact) => void;
 }
 
 export function ContactSidebar({
   contact,
   conversation,
   onUpdateConversation,
+  onUpdateContact,
 }: ContactSidebarProps) {
   const { accountId } = useAuth();
   const [copied, setCopied] = useState(false);
@@ -41,6 +44,37 @@ export function ContactSidebar({
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState("");
+
+  useEffect(() => {
+    if (contact) {
+      setEditName(contact.name || contact.phone || "");
+    }
+  }, [contact]);
+
+  const handleSaveName = async () => {
+    if (!contact || !editName.trim()) return;
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("contacts")
+        .update({ name: editName.trim() })
+        .eq("id", contact.id);
+
+      if (error) throw error;
+
+      onUpdateContact?.({
+        ...contact,
+        name: editName.trim(),
+      });
+      setIsEditingName(false);
+      toast.success("Nome do contato atualizado!");
+    } catch (err: any) {
+      console.error("Failed to update contact name:", err);
+      toast.error("Erro ao atualizar nome do contato");
+    }
+  };
 
   const handleAnalyzeSentiment = useCallback(async () => {
     if (!conversation) return;
@@ -172,9 +206,52 @@ export function ContactSidebar({
                 initials
               )}
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-foreground">
-              {displayName}
-            </h3>
+            {isEditingName ? (
+              <div className="mt-3 flex items-center gap-1">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter") {
+                      await handleSaveName();
+                    } else if (e.key === "Escape") {
+                      setIsEditingName(false);
+                      setEditName(displayName);
+                    }
+                  }}
+                  className="max-w-[160px] rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-primary"
+                  onClick={handleSaveName}
+                >
+                  Salvar
+                </Button>
+              </div>
+            ) : (
+              <div 
+                className="group mt-3 flex items-center justify-center gap-1.5 cursor-pointer hover:opacity-80"
+                onClick={() => setIsEditingName(true)}
+                title="Clique para editar o nome"
+              >
+                <h3 className="text-sm font-semibold text-foreground group-hover:text-primary">
+                  {displayName}
+                </h3>
+                <svg
+                  className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </div>
+            )}
             {contact.company && (
               <p className="text-xs text-muted-foreground">{contact.company}</p>
             )}
