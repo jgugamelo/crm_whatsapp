@@ -827,8 +827,31 @@ export function MessageThread({
       }
 
       onAssignChange(conversation.id, agentId);
+
+      // Send a takeover message to the customer on WhatsApp if an agent was assigned
+      if (agentId) {
+        const assignedAgent = profiles.find((p) => p.user_id === agentId);
+        if (assignedAgent) {
+          const agentName = assignedAgent.full_name || "Atendente";
+          const takeoverText = `Olá, aqui é o atendente ${agentName} e agora vou dar continuidade ao seu atendimento.`;
+          
+          try {
+            await fetch("/api/whatsapp/send", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                conversation_id: conversation.id,
+                message_type: "text",
+                content_text: takeoverText,
+              }),
+            });
+          } catch (sendErr) {
+            console.error("Failed to send takeover message:", sendErr);
+          }
+        }
+      }
     },
-    [conversation, onAssignChange],
+    [conversation, onAssignChange, profiles],
   );
 
   // Empty state — same WhatsApp-style doodle background as the active
