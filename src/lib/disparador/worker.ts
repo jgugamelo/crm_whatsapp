@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   sendWahaTextMessage,
   sendWahaMediaMessage,
+  sendWahaVoiceMessage,
   startWacallsCall,
   playWacallsAudio,
   getWacallsCallStatus
@@ -174,7 +175,7 @@ export function ensureQueueWorkerRunning() {
             const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "video", "video.mp4", cleanText);
             wahaMessageId = res.messageId;
           } else if (tipo === "audio") {
-            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "audio", "audio.ogg");
+            const res = await sendWahaVoiceMessage(wahaConfig, normalizedPhone, item.media_url);
             wahaMessageId = res.messageId;
           } else if (tipo === "arquivo") {
             const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "document", "documento", cleanText);

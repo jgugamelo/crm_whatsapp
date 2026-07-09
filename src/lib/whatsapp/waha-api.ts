@@ -351,4 +351,37 @@ export async function getWacallsCallStatus(
   return res.json();
 }
 
+export async function sendWahaVoiceMessage(
+  config: WahaConfig,
+  to: string,
+  mediaUrl: string
+): Promise<WahaSendResult> {
+  const chatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
+
+  const payload = {
+    chatId,
+    file: {
+      url: mediaUrl,
+    },
+    session: config.waha_session,
+  };
+
+  const res = await wahaFetch(config, '/api/sendVoice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`WAHA sendVoice failed (${res.status}): ${errText}`);
+  }
+
+  const data = await res.json();
+  return {
+    messageId: data.id || '',
+  };
+}
+
+
 
