@@ -401,7 +401,7 @@ export async function loadActivity(db: DB, limit = 20): Promise<ActivityItem[]> 
 export async function loadAiAnalytics(db: DB): Promise<AiAnalyticsData> {
   const [convs, msgs, deals] = await Promise.all([
     db.from('conversations').select('sentiment'),
-    db.from('messages').select('sender_type').eq('direction', 'outbound'),
+    db.from('messages').select('sender_type').in('sender_type', ['agent', 'bot']),
     db.from('deals').select('status')
   ]);
 
