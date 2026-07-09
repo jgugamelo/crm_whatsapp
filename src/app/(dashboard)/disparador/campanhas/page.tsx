@@ -518,7 +518,7 @@ export default function CampanhasPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                       <button
                         type="button"
                         onClick={() => {
@@ -539,7 +539,7 @@ export default function CampanhasPage() {
                         }}
                         className={`py-1.5 border rounded-md font-medium flex items-center justify-center gap-1 ${msg.tipo === "ia" ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border"}`}
                       >
-                        <Sparkles className="h-3 w-3" /> Gerado por IA
+                        <Sparkles className="h-3 w-3" /> IA
                       </button>
                       <button
                         type="button"
@@ -551,6 +551,28 @@ export default function CampanhasPage() {
                         className={`py-1.5 border rounded-md font-medium ${msg.tipo === "imagem" ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border"}`}
                       >
                         Imagem
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...mensagens];
+                          updated[i].tipo = "audio";
+                          setMensagens(updated);
+                        }}
+                        className={`py-1.5 border rounded-md font-medium ${msg.tipo === "audio" ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border"}`}
+                      >
+                        Áudio Chat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...mensagens];
+                          updated[i].tipo = "ligacao";
+                          setMensagens(updated);
+                        }}
+                        className={`py-1.5 border rounded-md font-medium ${msg.tipo === "ligacao" ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border"}`}
+                      >
+                        Ligação
                       </button>
                     </div>
 
@@ -602,6 +624,22 @@ export default function CampanhasPage() {
                             setMensagens(updated);
                           }}
                           placeholder="Legenda da imagem (Opcional)..."
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+                        />
+                      </div>
+                    )}
+
+                    {(msg.tipo === "audio" || msg.tipo === "ligacao") && (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={msg.url || ""}
+                          onChange={(e) => {
+                            const updated = [...mensagens];
+                            updated[i].url = e.target.value;
+                            setMensagens(updated);
+                          }}
+                          placeholder={msg.tipo === "ligacao" ? "Link do áudio WAV/MP3 da ligação (16kHz mono recomendado)..." : "Link do áudio OGG/MP3 da mensagem..."}
                           className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
                         />
                       </div>

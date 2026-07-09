@@ -162,6 +162,43 @@ export class MessageQueueWorker implements OnModuleInit {
         result = await this.waha.sendAudio(sessionName, telefone, item.media_url);
       } else if (tipo === 'arquivo') {
         result = await this.waha.sendFile(sessionName, telefone, item.media_url, item.mensagem_final || undefined);
+      } else if (tipo === 'ligacao') {
+        // 1. Inicia a chamada via WaCalls
+        const callRes = await this.waha.startCall(sessionName, telefone);
+        const callId = callRes.call?.callId;
+        if (!callId) {
+          throw new Error('Não foi possível gerar um CallID para a ligação');
+        }
+
+        // 2. Aguarda a ligação ser atendida (connected)
+        let isConnected = false;
+        let ended = false;
+
+        // Monitora a cada 2 segundos por no máximo 25 vezes (50 segundos total)
+        for (let attempt = 0; attempt < 25; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          try {
+            const callInfo = await this.waha.getCallStatus(sessionName, callId);
+            if (callInfo.status === 'connected') {
+              isConnected = true;
+              break;
+            }
+            if (callInfo.ended || callInfo.status === 'ended') {
+              ended = true;
+              break;
+            }
+          } catch (statusErr) {
+            this.logger.warn(`[Queue Worker] Failed to check status for call ${callId}: ${statusErr.message}`);
+          }
+        }
+
+        if (!isConnected) {
+          throw new Error(ended ? 'Chamada rejeitada ou encerrada pelo destinatário' : 'Chamada não atendida (tempo esgotado)');
+        }
+
+        // 3. Toca o áudio associado na ligação
+        await this.waha.playAudio(sessionName, callId, item.media_url);
+        result = { id: `call_${callId}` };
       } else {
         result = await this.waha.sendText(sessionName, telefone, item.mensagem_final);
       }

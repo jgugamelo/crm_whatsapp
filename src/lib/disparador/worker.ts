@@ -1,5 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
-import { sendWahaTextMessage, sendWahaMediaMessage } from "@/lib/whatsapp/waha-api";
+import {
+  sendWahaTextMessage,
+  sendWahaMediaMessage,
+  startWacallsCall,
+  playWacallsAudio,
+  getWacallsCallStatus
+} from "@/lib/whatsapp/waha-api";
+import { decrypt } from "@/lib/whatsapp/encryption";
 import OpenAI from "openai";
 
 const supabaseAdmin = createClient(
@@ -119,6 +126,14 @@ export function ensureQueueWorkerRunning() {
             throw new Error("WhatsApp WAHA connection is not active or configured for this session");
           }
 
+          // Build decrypted config
+          const decryptedApiKey = config.waha_api_key ? decrypt(config.waha_api_key) : null;
+          const wahaConfig = {
+            waha_url: config.waha_url,
+            waha_session: config.waha_session,
+            waha_api_key: decryptedApiKey,
+          };
+
           // Render message
           const tipo = item.tipo || "texto";
           let messageText = item.mensagem_final;
@@ -150,22 +165,58 @@ export function ensureQueueWorkerRunning() {
           const cleanText = messageText.replace(/{nome}/g, item.contacts?.name || "Cliente");
           const normalizedPhone = phone.replace("+", "");
 
-          // Trigger sending via WAHA
+          // Trigger sending via WAHA or WaCalls
           let wahaMessageId = "";
           if (tipo === "imagem") {
-            const res = await sendWahaMediaMessage(config, normalizedPhone, item.media_url, "image", "imagem.png", cleanText);
+            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "image", "imagem.png", cleanText);
             wahaMessageId = res.messageId;
           } else if (tipo === "video") {
-            const res = await sendWahaMediaMessage(config, normalizedPhone, item.media_url, "video", "video.mp4", cleanText);
+            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "video", "video.mp4", cleanText);
             wahaMessageId = res.messageId;
           } else if (tipo === "audio") {
-            const res = await sendWahaMediaMessage(config, normalizedPhone, item.media_url, "audio", "audio.ogg");
+            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "audio", "audio.ogg");
             wahaMessageId = res.messageId;
           } else if (tipo === "arquivo") {
-            const res = await sendWahaMediaMessage(config, normalizedPhone, item.media_url, "document", "documento", cleanText);
+            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "document", "documento", cleanText);
             wahaMessageId = res.messageId;
+          } else if (tipo === "ligacao") {
+            // 1. Inicia a chamada via WaCalls
+            const { callId } = await startWacallsCall(wahaConfig, normalizedPhone);
+            if (!callId) {
+              throw new Error("Não foi possível gerar um CallID para a ligação");
+            }
+
+            // 2. Aguarda a ligação ser atendida (connected)
+            let isConnected = false;
+            let ended = false;
+
+            // Monitora a cada 2 segundos por no máximo 25 vezes (50 segundos total)
+            for (let attempt = 0; attempt < 25; attempt++) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              try {
+                const callInfo = await getWacallsCallStatus(wahaConfig, callId);
+                if (callInfo.status === "connected") {
+                  isConnected = true;
+                  break;
+                }
+                if (callInfo.ended || callInfo.status === "ended") {
+                  ended = true;
+                  break;
+                }
+              } catch (statusErr) {
+                console.warn(`[Queue Worker] Failed to check status for call ${callId}:`, statusErr);
+              }
+            }
+
+            if (!isConnected) {
+              throw new Error(ended ? "Chamada rejeitada ou encerrada pelo destinatário" : "Chamada não atendida (tempo esgotado)");
+            }
+
+            // 3. Toca o áudio associado na ligação
+            await playWacallsAudio(wahaConfig, callId, item.media_url);
+            wahaMessageId = `call_${callId}`;
           } else {
-            const res = await sendWahaTextMessage(config, normalizedPhone, cleanText);
+            const res = await sendWahaTextMessage(wahaConfig, normalizedPhone, cleanText);
             wahaMessageId = res.messageId;
           }
 

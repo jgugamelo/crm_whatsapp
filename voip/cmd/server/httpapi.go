@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -26,6 +29,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{sid}/calls/{id}/reject", s.handleReject)
 	mux.HandleFunc("DELETE /api/sessions/{sid}/calls/{id}", s.handleEndCall)
 	mux.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
+	mux.HandleFunc("GET /api/sessions/{sid}/calls/{id}", s.handleGetCall)
+	mux.HandleFunc("POST /api/sessions/{sid}/calls/{id}/play", s.handlePlayAudio)
 
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 
@@ -279,3 +284,121 @@ func normalizePhone(p string) string {
 	}
 	return b.String()
 }
+
+func (s *server) handlePlayAudio(w http.ResponseWriter, r *http.Request) {
+	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
+		s.doPlayAudio(sess, w, r)
+	}
+}
+
+func (s *server) doPlayAudio(sess *Session, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ac, ok := sess.reg.get(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
+		return
+	}
+
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.URL) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url required"})
+		return
+	}
+
+	// Downloader & Streamer run in background to return status immediately
+	go func() {
+		s.log.Info("downloading audio to play on call", "url", body.URL, "call_id", id)
+		resp, err := http.Get(body.URL)
+		if err != nil {
+			s.log.Error("failed to download audio", "err", err, "call_id", id)
+			return
+		}
+		defer resp.Body.Close()
+
+		audioBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			s.log.Error("failed to read audio bytes", "err", err, "call_id", id)
+			return
+		}
+
+		offset := 0
+		if len(audioBytes) >= 44 && string(audioBytes[0:4]) == "RIFF" && string(audioBytes[8:12]) == "WAVE" {
+			offset = 44
+			s.log.Debug("detected WAV header, skipping first 44 bytes", "call_id", id)
+		} else {
+			s.log.Debug("no WAV header detected, playing as raw 16kHz mono PCM", "call_id", id)
+		}
+
+		pcmData := audioBytes[offset:]
+		samplesCount := len(pcmData) / 2
+		samples := make([]float32, samplesCount)
+		for i := 0; i < samplesCount; i++ {
+			if i*2+2 > len(pcmData) {
+				break
+			}
+			val := int16(binary.LittleEndian.Uint16(pcmData[i*2 : i*2+2]))
+			samples[i] = float32(val) / 32768.0
+		}
+
+		s.log.Info("starting audio playback in call", "samples", samplesCount, "call_id", id)
+
+		ticker := time.NewTicker(20 * time.Millisecond)
+		defer ticker.Stop()
+
+		chunkSize := 320
+		for i := 0; i < len(samples); i += chunkSize {
+			// Check if the call still exists in the registry (i.e. wasn't hung up)
+			if _, stillActive := sess.reg.get(id); !stillActive {
+				s.log.Info("call ended, stopping playback", "call_id", id)
+				return
+			}
+
+			end := i + chunkSize
+			if end > len(samples) {
+				end = len(samples)
+			}
+			chunk := samples[i:end]
+
+			// Pad short final chunk with silence
+			if len(chunk) < chunkSize {
+				padded := make([]float32, chunkSize)
+				copy(padded, chunk)
+				chunk = padded
+			}
+
+			ac.cm.FeedCapturedPCM(chunk)
+			<-ticker.C
+		}
+		s.log.Info("audio playback finished", "call_id", id)
+	}()
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "playback_started"})
+}
+
+func (s *server) handleGetCall(w http.ResponseWriter, r *http.Request) {
+	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
+		s.doGetCall(sess, w, r)
+	}
+}
+
+func (s *server) doGetCall(sess *Session, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	rec, ok := s.broker.getCall(id)
+	if !ok {
+		// Try checking history
+		history := s.broker.historyRows(sess.id, 50)
+		for _, h := range history {
+			if h.CallID == id {
+				writeJSON(w, http.StatusOK, map[string]any{"status": h.Status, "ended": true})
+				return
+			}
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": rec.Status, "ended": false})
+}
+
+

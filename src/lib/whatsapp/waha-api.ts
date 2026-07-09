@@ -293,3 +293,62 @@ export async function sendWahaReaction(
   }
 }
 
+export async function startWacallsCall(
+  config: WahaConfig,
+  phone: string
+): Promise<{ callId: string }> {
+  const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/calls`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ phone }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to start WaCalls call: ${res.status} - ${errorText}`);
+  }
+
+  const data = await res.json();
+  return {
+    callId: data.call?.callId || '',
+  };
+}
+
+export async function playWacallsAudio(
+  config: WahaConfig,
+  callId: string,
+  url: string
+): Promise<void> {
+  const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/calls/${callId}/play`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to play WaCalls audio: ${res.status} - ${errorText}`);
+  }
+}
+
+export async function getWacallsCallStatus(
+  config: WahaConfig,
+  callId: string
+): Promise<{ status: string; ended: boolean }> {
+  const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/calls/${callId}`, {
+    method: 'GET',
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to get WaCalls call status: ${res.status} - ${errorText}`);
+  }
+
+  return res.json();
+}
+
+

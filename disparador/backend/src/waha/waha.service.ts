@@ -153,6 +153,22 @@ export class WahaService {
     return data;
   }
 
+  async startCall(sessionName: string, phone: string) {
+    const { data } = await this.http.post(`/api/sessions/${sessionName}/calls`, { phone });
+    return data;
+  }
+
+  async playAudio(sessionName: string, callId: string, url: string) {
+    const { data } = await this.http.post(`/api/sessions/${sessionName}/calls/${callId}/play`, { url });
+    return data;
+  }
+
+  async getCallStatus(sessionName: string, callId: string) {
+    const { data } = await this.http.get(`/api/sessions/${sessionName}/calls/${callId}`);
+    return data;
+  }
+
+
   async sendFile(sessionName: string, phone: string, fileUrl: string, caption?: string) {
     const chatId = phone.replace('+', '') + '@c.us';
     const { data } = await this.http.post(`/api/sendFile`, {
