@@ -76,3 +76,25 @@ export interface PipelineDonutData {
   stages: PipelineStageSlice[]
   totalValue: number
 }
+
+export interface AiAnalyticsData {
+  sentiment: {
+    positive: number
+    neutral: number
+    negative: number
+    mixed: number
+    total: number
+  }
+  messagesRatio: {
+    bot: number
+    human: number
+    total: number
+  }
+  conversion: {
+    won: number
+    lost: number
+    open: number
+    total: number
+    rate: number
+  }
+}

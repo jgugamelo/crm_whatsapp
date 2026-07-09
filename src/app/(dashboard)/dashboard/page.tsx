@@ -16,6 +16,7 @@ import {
   loadMetrics,
   loadConversationsStatusDonut,
   loadResponseTime,
+  loadAiAnalytics,
 } from '@/lib/dashboard/queries'
 import type {
   ActivityItem,
@@ -23,6 +24,7 @@ import type {
   MetricsBundle,
   ConversationsStatusData,
   ResponseTimeSummary,
+  AiAnalyticsData,
 } from '@/lib/dashboard/types'
 
 import { MetricCard } from '@/components/dashboard/metric-card'
@@ -32,6 +34,7 @@ import { ConversationsChart } from '@/components/dashboard/conversations-chart'
 import { ConversationsStatusDonut } from '@/components/dashboard/conversations-status-donut'
 import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
+import { AiPerformance } from '@/components/dashboard/ai-performance'
 
 type RangeDays = 7 | 30 | 90
 
@@ -55,6 +58,9 @@ export default function DashboardPage() {
 
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
   const [activityLoading, setActivityLoading] = useState(true)
+
+  const [aiPerformance, setAiPerformance] = useState<AiAnalyticsData | null>(null)
+  const [aiPerformanceLoading, setAiPerformanceLoading] = useState(true)
 
   const loadAll = useCallback(() => {
     const db = createClient()
@@ -83,6 +89,11 @@ export default function DashboardPage() {
       .then((a) => setActivity(a))
       .catch((err) => console.error('[dashboard] activity failed:', err))
       .finally(() => setActivityLoading(false))
+
+    void loadAiAnalytics(db)
+      .then((a) => setAiPerformance(a))
+      .catch((err) => console.error('[dashboard] ai performance failed:', err))
+      .finally(() => setAiPerformanceLoading(false))
   }, [])
 
   useEffect(() => {
@@ -168,6 +179,12 @@ export default function DashboardPage() {
 
       {/* Quick actions */}
       <QuickActions />
+
+      {/* Desempenho da IA e Vendas */}
+      <div className="space-y-1.5">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Desempenho da IA & Conversão</h3>
+        <AiPerformance data={aiPerformance} loading={aiPerformanceLoading} />
+      </div>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">

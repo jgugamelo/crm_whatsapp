@@ -15,6 +15,7 @@ import type {
   ConversationsStatusSlice,
   ResponseTimeBucket,
   ResponseTimeSummary,
+  AiAnalyticsData,
 } from './types'
 
 // ------------------------------------------------------------
@@ -395,4 +396,45 @@ export async function loadActivity(db: DB, limit = 20): Promise<ActivityItem[]> 
   return items
     .sort((a, b) => (a.at > b.at ? -1 : a.at < b.at ? 1 : 0))
     .slice(0, limit)
+}
+
+export async function loadAiAnalytics(db: DB): Promise<AiAnalyticsData> {
+  const [convs, msgs, deals] = await Promise.all([
+    db.from('conversations').select('sentiment'),
+    db.from('messages').select('sender_type').eq('direction', 'outbound'),
+    db.from('deals').select('status')
+  ]);
+
+  const sentiment = { positive: 0, neutral: 0, negative: 0, mixed: 0, total: 0 };
+  for (const row of (convs.data ?? []) as { sentiment: string }[]) {
+    const s = row.sentiment;
+    if (s === 'positive') sentiment.positive++;
+    else if (s === 'neutral') sentiment.neutral++;
+    else if (s === 'negative') sentiment.negative++;
+    else if (s === 'mixed') sentiment.mixed++;
+  }
+  sentiment.total = sentiment.positive + sentiment.neutral + sentiment.negative + sentiment.mixed;
+
+  const messagesRatio = { bot: 0, human: 0, total: 0 };
+  for (const row of (msgs.data ?? []) as { sender_type: string }[]) {
+    if (row.sender_type === 'bot') messagesRatio.bot++;
+    else if (row.sender_type === 'agent') messagesRatio.human++;
+  }
+  messagesRatio.total = messagesRatio.bot + messagesRatio.human;
+
+  const conversion = { won: 0, lost: 0, open: 0, total: 0, rate: 0 };
+  for (const row of (deals.data ?? []) as { status: string }[]) {
+    if (row.status === 'won') conversion.won++;
+    else if (row.status === 'lost') conversion.lost++;
+    else if (row.status === 'open') conversion.open++;
+  }
+  conversion.total = conversion.won + conversion.lost + conversion.open;
+  const closedCount = conversion.won + conversion.lost;
+  conversion.rate = closedCount > 0 ? Math.round((conversion.won / closedCount) * 100) : 0;
+
+  return {
+    sentiment,
+    messagesRatio,
+    conversion
+  };
 }
