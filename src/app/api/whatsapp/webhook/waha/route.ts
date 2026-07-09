@@ -373,33 +373,47 @@ export async function POST(request: Request) {
       // Map WAHA message types to CRM content_type.
       // Use mimetype-based classification if media details are available,
       // fallback to type-based mapping.
+      const rawType = type || payload._data?.Info?.Type || ''
       let contentType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'poll' | 'vcard' | 'revoked' = 'text'
       if (mediaInfo) {
         const mime = mediaInfo.mimetype || mediaInfo.mime_type || ''
         if (mime.startsWith('image/')) {
-          contentType = type === 'sticker' ? 'sticker' : 'image'
+          contentType = rawType === 'sticker' ? 'sticker' : 'image'
         }
         else if (mime.startsWith('video/')) contentType = 'video'
         else if (mime.startsWith('audio/')) contentType = 'audio'
-        else if (type === 'sticker') contentType = 'sticker'
+        else if (rawType === 'sticker') contentType = 'sticker'
         else contentType = 'document'
       } else {
-        if (type === 'image') contentType = 'image'
-        else if (type === 'sticker') contentType = 'sticker'
-        else if (type === 'video') contentType = 'video'
-        else if (type === 'audio' || type === 'ptt') contentType = 'audio'
-        else if (type === 'document') contentType = 'document'
-        else if (type === 'poll' || type === 'poll_creation' || type === 'pollCreation') contentType = 'poll'
-        else if (type === 'vcard' || type === 'contact') contentType = 'vcard'
-        else if (type === 'revoked') contentType = 'revoked'
+        if (rawType === 'image') contentType = 'image'
+        else if (rawType === 'sticker') contentType = 'sticker'
+        else if (rawType === 'video') contentType = 'video'
+        else if (rawType === 'audio' || rawType === 'ptt') contentType = 'audio'
+        else if (rawType === 'document') contentType = 'document'
+        else if (rawType === 'poll' || rawType === 'poll_creation' || rawType === 'pollCreation') contentType = 'poll'
+        else if (rawType === 'vcard' || rawType === 'contact') contentType = 'vcard'
+        else if (rawType === 'revoked') contentType = 'revoked'
       }
 
       let contentText = textBody || ''
-      if (contentType === 'poll' && !contentText && payload.poll?.name) {
-        contentText = payload.poll.name
+      if (contentType === 'poll' && !contentText) {
+        const pollMsg = payload._data?.Message?.pollCreationMessage || 
+                        payload._data?.Message?.pollCreationMessageV2 || 
+                        payload._data?.Message?.pollCreationMessageV3 ||
+                        payload.poll
+        if (pollMsg?.name) {
+          contentText = pollMsg.name
+        }
       }
-      if (contentType === 'vcard' && !contentText && payload.vcard?.name) {
-        contentText = payload.vcard.name
+      if (contentType === 'vcard' && !contentText) {
+        const contactMsg = payload._data?.Message?.contactMessage || payload.vcard
+        if (contactMsg?.displayName) {
+          contentText = contactMsg.displayName
+        } else if (contactMsg?.name) {
+          contentText = contactMsg.name
+        } else if (payload._data?.Message?.contactsArrayMessage?.contacts?.[0]?.displayName) {
+          contentText = payload._data.Message.contactsArrayMessage.contacts[0].displayName
+        }
       }
 
       const messageDate = new Date(timestamp * 1000).toISOString()
