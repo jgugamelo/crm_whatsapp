@@ -192,19 +192,24 @@ Use as informações da base de conhecimento acima para responder às dúvidas d
 
   // 6. Voice Reply Generation (ElevenLabs)
   let voiceMediaUrl = "";
-  if (incomingWasAudio && aiConfig.elevenlabs_enabled && aiConfig.elevenlabs_api_key && aiConfig.elevenlabs_voice_id) {
+  const elevenlabsEnabled = aiConfig.elevenlabs_enabled || !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_VOICE_ID);
+  const elevenlabsApiKey = aiConfig.elevenlabs_api_key || process.env.ELEVENLABS_API_KEY;
+  const elevenlabsVoiceId = aiConfig.elevenlabs_voice_id || process.env.ELEVENLABS_VOICE_ID;
+  const elevenlabsModelId = process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2";
+
+  if (incomingWasAudio && elevenlabsEnabled && elevenlabsApiKey && elevenlabsVoiceId) {
     try {
       console.log("[AI Agent] Generating voice reply with ElevenLabs...");
-      const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${aiConfig.elevenlabs_voice_id}`;
+      const ttsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${elevenlabsVoiceId}`;
       const ttsRes = await fetch(ttsUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "xi-api-key": aiConfig.elevenlabs_api_key,
+          "xi-api-key": elevenlabsApiKey,
         },
         body: JSON.stringify({
           text: generatedText,
-          model_id: "eleven_multilingual_v2",
+          model_id: elevenlabsModelId,
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.75,

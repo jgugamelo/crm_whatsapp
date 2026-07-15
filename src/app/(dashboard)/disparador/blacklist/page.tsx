@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 interface BlacklistEntry {
   id: string;
@@ -33,6 +34,7 @@ const MOTIVO_LABELS: Record<string, string> = {
 };
 
 export default function BlacklistPage() {
+  const { accountId } = useAuth();
   const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
   const [filteredList, setFilteredList] = useState<BlacklistEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,16 +47,20 @@ export default function BlacklistPage() {
   const [mensagemDetectada, setMensagemDetectada] = useState("");
 
   useEffect(() => {
-    loadBlacklist();
-  }, []);
+    if (accountId) {
+      loadBlacklist();
+    }
+  }, [accountId]);
 
   const loadBlacklist = async () => {
+    if (!accountId) return;
     setLoading(true);
     try {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("blacklist")
         .select("*")
+        .eq("account_id", accountId)
         .order("data_bloqueio", { ascending: false });
       
       if (error) throw error;
@@ -114,6 +120,7 @@ export default function BlacklistPage() {
     try {
       const supabase = createClient();
       const { error } = await supabase.from("blacklist").insert({
+        account_id: accountId,
         telefone: cleanPhone,
         motivo,
         mensagem_detectada: mensagemDetectada || null,

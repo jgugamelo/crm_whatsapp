@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 interface QueueLog {
   id: string;
@@ -32,6 +33,7 @@ interface QueueLog {
 }
 
 export default function DisparadorDashboardPage() {
+  const { accountId } = useAuth();
   const [queue, setQueue] = useState<QueueLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -42,16 +44,19 @@ export default function DisparadorDashboardPage() {
   });
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 5000); // refresh queue status every 5s
-    return () => clearInterval(interval);
-  }, []);
+    if (accountId) {
+      loadData();
+      const interval = setInterval(loadData, 5000); // refresh queue status every 5s
+      return () => clearInterval(interval);
+    }
+  }, [accountId]);
 
   const loadData = async () => {
+    if (!accountId) return;
     try {
       const supabase = createClient();
 
-      // Fetch last 15 queue logs with contact and campaign info
+      // Fetch last 15 queue logs with contact and campaign info for this account
       const { data, error } = await supabase
         .from("disp_message_queue")
         .select(`
@@ -65,6 +70,7 @@ export default function DisparadorDashboardPage() {
           contacts:contact_id ( name, phone ),
           campaigns:campaign_id ( nome )
         `)
+        .eq("account_id", accountId)
         .order("scheduled_at", { ascending: false })
         .limit(15);
 
@@ -84,10 +90,11 @@ export default function DisparadorDashboardPage() {
         setQueue(mappedData);
       }
 
-      // Fetch Queue Stats
+      // Fetch Queue Stats for this account
       const { data: countData } = await supabase
         .from("disp_message_queue")
-        .select("status");
+        .select("status")
+        .eq("account_id", accountId);
 
       if (countData) {
         const counts = { scheduled: 0, sending: 0, success: 0, failed: 0 };

@@ -1,6 +1,13 @@
 "use client";
 
-import { Check, Moon, Palette, SunMoon, Sun } from "lucide-react";
+import { Check, Moon, Palette, SunMoon, Sun, Image, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import { useTheme } from "@/hooks/use-theme";
 import { MODES, THEMES, type Mode, type ThemeId } from "@/lib/themes";
@@ -21,22 +28,57 @@ import { SettingsPanelHead } from "./settings-panel-head";
  */
 export function AppearancePanel() {
   const { theme, setTheme, mode, setMode } = useTheme();
+  const { account, accountId, accountRole, refreshProfile } = useAuth();
+  const [logoUrl, setLogoUrl] = useState("");
+  const [savingLogo, setSavingLogo] = useState(false);
+
+  useEffect(() => {
+    if (account?.logo_url) {
+      setLogoUrl(account.logo_url);
+    } else {
+      setLogoUrl("");
+    }
+  }, [account]);
+
+  const handleSaveLogo = async () => {
+    if (!accountId) return;
+    setSavingLogo(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("accounts")
+        .update({ logo_url: logoUrl.trim() || null })
+        .eq("id", accountId);
+
+      if (error) throw error;
+
+      toast.success("Logotipo atualizado!");
+      await refreshProfile();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao atualizar logotipo");
+    } finally {
+      setSavingLogo(false);
+    }
+  };
+
+  const isAllowedToEdit = accountRole === "owner" || accountRole === "admin";
+
   return (
     <section className="max-w-3xl animate-in fade-in-50 duration-200">
       <SettingsPanelHead
-        title="Appearance"
-        description="Set the mode and accent colour used across the app. Saved to this device — try it, it changes live."
+        title="Aparência"
+        description="Defina o tema, cor de destaque e logotipo da sua conta."
       />
 
       <div className="space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <SunMoon className="size-4 text-muted-foreground" />
-          Mode
+          Modo
         </h3>
 
         <div
           role="radiogroup"
-          aria-label="Color mode"
+          aria-label="Modo de cor"
           className="grid max-w-md grid-cols-2 gap-3"
         >
           {MODES.map((m) => (
@@ -53,7 +95,7 @@ export function AppearancePanel() {
       <div className="mt-8 space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Palette className="size-4 text-muted-foreground" />
-          Accent color
+          Cor de destaque
         </h3>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -70,6 +112,46 @@ export function AppearancePanel() {
           ))}
         </div>
       </div>
+
+      {isAllowedToEdit && (
+        <div className="mt-8 border-t border-border pt-8 space-y-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Image className="size-4 text-muted-foreground" />
+            Logotipo do CRM
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Insira a URL de uma imagem para substituir o logotipo padrão do DDM CRM no menu lateral.
+          </p>
+          <div className="flex max-w-md items-end gap-3">
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="crm-logo-url" className="sr-only">URL do Logotipo</Label>
+              <Input
+                id="crm-logo-url"
+                placeholder="https://exemplo.com/logo.png"
+                value={logoUrl}
+                onChange={(e) => setLogoUrl(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleSaveLogo} disabled={savingLogo}>
+              {savingLogo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar Logo
+            </Button>
+          </div>
+          {logoUrl && (
+            <div className="mt-3 flex items-center gap-3 rounded-lg border p-3 bg-muted/40 max-w-md">
+              <span className="text-xs text-muted-foreground">Pré-visualização:</span>
+              <img
+                src={logoUrl}
+                alt="Preview do Logo"
+                className="h-8 max-w-[120px] object-contain rounded"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

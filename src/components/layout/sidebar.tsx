@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
+import { toast } from "sonner";
 import {
   Crown,
   GitBranch,
@@ -26,6 +27,7 @@ import {
   Zap,
   Bot,
   HelpCircle,
+  Pencil,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
 import { DdmLogo } from "@/components/ui/ddm-logo";
@@ -95,7 +97,6 @@ const navItems: NavItem[] = [
   { href: "/broadcasts", label: "Transmissões", icon: Radio },
   { href: "/automations", label: "Automações", icon: Zap },
   { href: "/flows", label: "Fluxos", icon: Workflow, beta: true },
-  { href: "/lead-extractor", label: "Extrator de leads", icon: Globe },
   { href: "/disparador", label: "Disparador", icon: Megaphone },
   { href: "/settings?tab=ai", label: "Agente de IA", icon: Bot },
 ];
@@ -114,8 +115,67 @@ interface SidebarProps {
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { profile, profileLoading, account, accountRole, signOut, canEditSettings, refreshProfile } = useAuth();
   const totalUnread = useTotalUnread();
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (account?.name) {
+      setEditName(account.name);
+    }
+  }, [account?.name]);
+
+  const handleSave = async (newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      toast.error("O nome do CRM não pode ser vazio.");
+      if (account?.name) setEditName(account.name);
+      setIsEditing(false);
+      return;
+    }
+    if (trimmed === account?.name) {
+      setIsEditing(false);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/account", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Falha ao atualizar o nome do CRM.");
+      }
+      await refreshProfile();
+      toast.success("Nome do CRM atualizado com sucesso!");
+      setIsEditing(false);
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao salvar.");
+      if (account?.name) setEditName(account.name);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleSave(editName);
+    } else if (e.key === "Escape") {
+      if (account?.name) setEditName(account.name);
+      setIsEditing(false);
+    }
+  };
+
+  const handleBlur = () => {
+    handleSave(editName);
+  };
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -184,12 +244,48 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <DdmLogo showBackground />
-            <span className="text-sm font-semibold text-foreground">
-              DDM CRM
-            </span>
-          </Link>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
+              {account?.logo_url ? (
+                <img
+                  src={account.logo_url}
+                  alt="Logo"
+                  className="h-8 w-8 object-contain rounded-lg"
+                />
+              ) : (
+                <DdmLogo showBackground />
+              )}
+            </Link>
+
+            {isEditing ? (
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={handleBlur}
+                className="bg-transparent border-b border-primary text-sm font-semibold text-foreground focus:outline-none w-full max-w-[120px]"
+                autoFocus
+                disabled={isSaving}
+              />
+            ) : (
+              <div
+                className={cn(
+                  "flex items-center gap-1 group/name cursor-pointer min-w-0",
+                  !canEditSettings && "cursor-default"
+                )}
+                onClick={canEditSettings ? () => setIsEditing(true) : undefined}
+                title={canEditSettings ? "Clique para editar o nome do CRM" : undefined}
+              >
+                <span className="text-sm font-semibold text-foreground truncate max-w-[120px]">
+                  {account?.name || "DDM CRM"}
+                </span>
+                {canEditSettings && (
+                  <Pencil className="size-3 opacity-0 group-hover/name:opacity-100 transition-opacity text-muted-foreground shrink-0" />
+                )}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}

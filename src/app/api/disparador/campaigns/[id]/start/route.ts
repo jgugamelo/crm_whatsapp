@@ -52,10 +52,11 @@ export async function POST(
       .eq("campaign_id", campaignId)
       .in("status", ["pendente", "agendado", "erro"]);
 
-    // 3. Load active contacts
+    // 3. Load active contacts belonging to this account
     const { data: allContacts, error: contactsError } = await supabaseAdmin
       .from("contacts")
-      .select("id, name, phone");
+      .select("id, name, phone")
+      .eq("account_id", campaign.account_id);
 
     if (contactsError) {
       throw new Error(`Erro ao carregar contatos: ${contactsError.message}`);
@@ -109,8 +110,11 @@ export async function POST(
       );
     }
 
-    // Fetch Blacklist to skip
-    const { data: blacklist } = await supabaseAdmin.from("blacklist").select("telefone");
+    // Fetch Blacklist to skip (filtered by account)
+    const { data: blacklist } = await supabaseAdmin
+      .from("blacklist")
+      .select("telefone")
+      .eq("account_id", campaign.account_id);
     const blacklistSet = new Set((blacklist ?? []).map((b) => b.telefone));
 
     // 4. Scheduling queue generation loop
@@ -145,6 +149,7 @@ export async function POST(
         const interpolatedText = rawText.replace(/{nome}/g, contact.name || "Cliente");
 
         queueRows.push({
+          account_id: campaign.account_id,
           campaign_id: campaignId,
           contact_id: contact.id,
           session_id: sessionId,

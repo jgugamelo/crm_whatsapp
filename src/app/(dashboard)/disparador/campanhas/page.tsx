@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import Link from "next/link";
 import { uploadAccountMedia } from "@/lib/storage/upload-media";
+import { useAuth } from "@/hooks/use-auth";
 
 interface Campaign {
   id: string;
@@ -68,6 +69,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function CampanhasPage() {
+  const { accountId, user } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [tags, setTags] = useState<TagItem[]>([]);
@@ -86,15 +88,17 @@ export default function CampanhasPage() {
   const [janelaFim, setJanelaFim] = useState("18:00");
   const [mensagens, setMensagens] = useState<any[]>([{ tipo: "texto", conteudo: "" }]);
 
-  // Load Data on Mount
+  // Load Data on Mount/Change
   useEffect(() => {
-    loadData();
-  }, []);
+    if (accountId) {
+      loadData();
+    }
+  }, [accountId]);
 
   // Poll campaigns periodically if any campaign is in execution
   useEffect(() => {
     const hasActiveCampaign = campaigns.some((c) => c.status === "em_execucao");
-    if (!hasActiveCampaign) return;
+    if (!hasActiveCampaign || !accountId) return;
 
     const interval = setInterval(async () => {
       try {
@@ -102,6 +106,7 @@ export default function CampanhasPage() {
         const { data: campaignList } = await supabase
           .from("campaigns")
           .select("*")
+          .eq("account_id", accountId)
           .order("created_at", { ascending: false });
         if (campaignList) {
           setCampaigns(campaignList);
@@ -112,9 +117,10 @@ export default function CampanhasPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [campaigns]);
+  }, [campaigns, accountId]);
 
   const loadData = async () => {
+    if (!accountId) return;
     setLoading(true);
     try {
       const supabase = createClient();
@@ -123,18 +129,20 @@ export default function CampanhasPage() {
       const { data: campaignList } = await supabase
         .from("campaigns")
         .select("*")
+        .eq("account_id", accountId)
         .order("created_at", { ascending: false });
       setCampaigns(campaignList ?? []);
 
-      // Load Tags
+      // Load Tags (filtered by user/account through RLS already, but we can load directly)
       const { data: tagList } = await supabase.from("tags").select("id, name, color").order("name");
       setTags(tagList ?? []);
 
-      // Load Active WAHA Sessions
+      // Load Active WAHA Sessions for this account
       const { data: configList } = await supabase
         .from("whatsapp_config")
         .select("id, waha_session")
-        .eq("provider", "waha");
+        .eq("provider", "waha")
+        .eq("account_id", accountId);
 
       const wahaSessions = (configList ?? []).map((c) => ({
         id: c.id,
@@ -223,6 +231,8 @@ export default function CampanhasPage() {
     try {
       const supabase = createClient();
       const campaignData = {
+        account_id: accountId,
+        created_by: user?.id,
         nome,
         descricao,
         objetivo,
