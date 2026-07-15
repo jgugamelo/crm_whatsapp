@@ -15,7 +15,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MessageSquare, CheckCircle, UsersRound } from "lucide-react";
-import { DdmLogo } from "@/components/ui/ddm-logo";
 
 // `useSearchParams` opts the component out of static prerendering
 // unless wrapped in Suspense — same pattern as /login.
@@ -136,7 +135,7 @@ function SignupPageInner() {
             {inviteToken ? (
               <UsersRound className="h-6 w-6 text-primary" />
             ) : (
-              <DdmLogo className="h-7 w-7 text-primary" outlineColor="oklch(from var(--primary) l c h / 0.1)" />
+              <MessageSquare className="h-6 w-6 text-primary" />
             )}
           </div>
           <CardTitle className="text-xl text-foreground">
@@ -145,7 +144,7 @@ function SignupPageInner() {
           <CardDescription className="text-muted-foreground">
             {inviteToken
               ? "Verifique seu e-mail, depois aceite o convite para se juntar à equipe."
-              : "Comece a usar o CRM DDM"}
+              : "Comece a usar o CRM"}
           </CardDescription>
         </CardHeader>
         <CardContent>

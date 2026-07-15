@@ -53,27 +53,49 @@ export async function PATCH(request: Request) {
     if (!limit.success) return rateLimitResponse(limit);
 
     const body = (await request.json().catch(() => null)) as
-      | { name?: unknown }
+      | { name?: unknown; logo_url?: unknown }
       | null;
-    const rawName = body?.name;
 
-    if (typeof rawName !== "string") {
-      return NextResponse.json(
-        { error: "'name' must be a string" },
-        { status: 400 },
-      );
+    const updates: Record<string, any> = {};
+
+    if (body?.name !== undefined) {
+      const rawName = body.name;
+      if (typeof rawName !== "string") {
+        return NextResponse.json(
+          { error: "'name' must be a string" },
+          { status: 400 },
+        );
+      }
+      const name = rawName.trim();
+      if (name.length === 0) {
+        return NextResponse.json(
+          { error: "Account name cannot be empty" },
+          { status: 400 },
+        );
+      }
+      if (name.length > MAX_NAME_LEN) {
+        return NextResponse.json(
+          { error: `Account name must be ${MAX_NAME_LEN} characters or fewer` },
+          { status: 400 },
+        );
+      }
+      updates.name = name;
     }
 
-    const name = rawName.trim();
-    if (name.length === 0) {
-      return NextResponse.json(
-        { error: "Account name cannot be empty" },
-        { status: 400 },
-      );
+    if (body?.logo_url !== undefined) {
+      const rawLogoUrl = body.logo_url;
+      if (rawLogoUrl !== null && typeof rawLogoUrl !== "string") {
+        return NextResponse.json(
+          { error: "'logo_url' must be a string or null" },
+          { status: 400 },
+        );
+      }
+      updates.logo_url = rawLogoUrl;
     }
-    if (name.length > MAX_NAME_LEN) {
+
+    if (Object.keys(updates).length === 0) {
       return NextResponse.json(
-        { error: `Account name must be ${MAX_NAME_LEN} characters or fewer` },
+        { error: "No fields to update" },
         { status: 400 },
       );
     }
@@ -83,9 +105,9 @@ export async function PATCH(request: Request) {
     // guaranteed the caller is admin+.
     const { data, error } = await ctx.supabase
       .from("accounts")
-      .update({ name })
+      .update(updates)
       .eq("id", ctx.accountId)
-      .select("id, name")
+      .select("id, name, logo_url")
       .single();
 
     if (error) {
