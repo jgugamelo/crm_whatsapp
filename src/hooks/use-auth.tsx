@@ -289,6 +289,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchProfile]);
 
+  // Dynamic Favicon sync based on account logo
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+    if (link) {
+      link.href = account?.logo_url || "/icon";
+    }
+  }, [account?.logo_url]);
+
   const signOut = useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
