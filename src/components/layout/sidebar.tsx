@@ -186,11 +186,11 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               <img
                 src={account.logo_url}
                 alt={account.name}
-                className="h-8 w-8 rounded-lg object-contain"
+                className="h-10 w-10 rounded-lg object-contain"
               />
             ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <MessageSquare className="h-4 w-4" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <MessageSquare className="h-5 w-5" />
               </div>
             )}
             <span className="text-sm font-semibold text-foreground truncate max-w-[140px]">
