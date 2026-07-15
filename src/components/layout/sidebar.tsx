@@ -93,7 +93,6 @@ const navItems: NavItem[] = [
   { href: "/pipelines", label: "Funis", icon: GitBranch },
   { href: "/automations", label: "Automações", icon: Zap },
   { href: "/flows", label: "Fluxos", icon: Workflow, beta: true },
-  { href: "/lead-extractor", label: "Extrator de leads", icon: Globe },
   { href: "/disparador", label: "Disparador", icon: Megaphone },
   { href: "/settings?tab=ai", label: "Agente de IA", icon: Bot },
 ];
