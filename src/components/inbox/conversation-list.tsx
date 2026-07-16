@@ -58,6 +58,30 @@ export function ConversationList({
   const [selectedLine, setSelectedLine] = useState<string>("all");
   const [configs, setConfigs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const loadDrafts = useCallback(() => {
+    const newDrafts: Record<string, string> = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("wacrm:draft:")) {
+          const conversationId = key.replace("wacrm:draft:", "");
+          const value = localStorage.getItem(key);
+          if (value) {
+            newDrafts[conversationId] = value;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load drafts:", err);
+    }
+    setDrafts(newDrafts);
+  }, []);
+
+  useEffect(() => {
+    loadDrafts();
+  }, [activeConversationId, loadDrafts]);
 
   // Fetch configured lines for dropdown filter
   useEffect(() => {
@@ -277,6 +301,7 @@ export function ConversationList({
                 key={conv.id}
                 conversation={conv}
                 isActive={conv.id === activeConversationId}
+                draftText={drafts[conv.id]}
                 onSelect={handleSelect}
               />
             ))}
@@ -290,6 +315,7 @@ export function ConversationList({
 interface ConversationItemProps {
   conversation: Conversation;
   isActive: boolean;
+  draftText?: string;
   onSelect: (conversation: Conversation) => void;
 }
 
@@ -303,6 +329,7 @@ const SENTIMENT_ICONS: Record<string, { emoji: string; color: string; label: str
 function ConversationItem({
   conversation,
   isActive,
+  draftText,
   onSelect,
 }: ConversationItemProps) {
   const contact = conversation.contact;
@@ -365,9 +392,15 @@ function ConversationItem({
           </div>
         )}
         <div className="mt-0.5 flex items-center justify-between gap-2">
-          <p className="truncate text-xs text-muted-foreground">
-            {conversation.last_message_text || "Nenhuma mensagem ainda"}
-          </p>
+          {draftText ? (
+            <p className="truncate text-xs text-amber-500 font-medium">
+              <span className="font-semibold">[Rascunho]:</span> {draftText}
+            </p>
+          ) : (
+            <p className="truncate text-xs text-muted-foreground">
+              {conversation.last_message_text || "Nenhuma mensagem ainda"}
+            </p>
+          )}
           <div className="flex shrink-0 items-center gap-2">
             {/* Sentiment Emoji */}
             {conversation.sentiment && conversation.sentiment !== "unknown" && (
