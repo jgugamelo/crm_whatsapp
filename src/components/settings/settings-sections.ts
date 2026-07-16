@@ -12,6 +12,7 @@ import {
   Bot,
   Sparkles,
   MessageSquare,
+  Share2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -31,6 +32,7 @@ export const SETTINGS_SECTIONS = [
   'branding',
   'quick_replies',
   'whatsapp',
+  'channels',
   'templates',
   'fields',
   'deals',
@@ -59,6 +61,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   branding: { id: 'branding', label: 'Marca e Identidade', icon: Sparkles, group: 'workspace' },
   quick_replies: { id: 'quick_replies', label: 'Respostas rápidas', icon: MessageSquare, group: 'workspace' },
   whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: PlugZap, group: 'workspace' },
+  channels: { id: 'channels', label: 'Instagram / Messenger', icon: Share2, group: 'workspace' },
   templates: { id: 'templates', label: 'Templates', icon: FileText, group: 'workspace' },
   fields: { id: 'fields', label: 'Campos e tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Negócios e moeda', icon: Coins, group: 'workspace' },

@@ -19,6 +19,7 @@ import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { AiAgentSettings } from '@/components/settings/ai-agent-settings';
 import { BrandingSettings } from '@/components/settings/branding-settings';
 import { QuickRepliesSettings } from '@/components/settings/quick-replies-settings';
+import { ChannelsSettings } from '@/components/settings/channels-settings';
 import {
   resolveSection,
   type SettingsSection,
@@ -49,6 +50,11 @@ export default function SettingsPage() {
     () => ({
       appearance: mode.charAt(0).toUpperCase() + mode.slice(1),
       deals: defaultCurrency,
+      channels: (
+        <span className="bg-primary/15 text-primary border border-primary/20 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider scale-90">
+          Beta
+        </span>
+      ),
     }),
     [mode, defaultCurrency],
   );
@@ -61,6 +67,7 @@ export default function SettingsPage() {
     branding: <BrandingSettings />,
     quick_replies: <QuickRepliesSettings />,
     whatsapp: <WhatsAppConfig />,
+    channels: <ChannelsSettings />,
     templates: <TemplateManager />,
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
