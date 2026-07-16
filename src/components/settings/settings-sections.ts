@@ -11,6 +11,7 @@ import {
   UsersRound,
   Bot,
   Sparkles,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -28,6 +29,7 @@ export const SETTINGS_SECTIONS = [
   'security',
   'appearance',
   'branding',
+  'quick_replies',
   'whatsapp',
   'templates',
   'fields',
@@ -55,6 +57,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   security: { id: 'security', label: 'Login e segurança', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Aparência', icon: Palette, group: 'account' },
   branding: { id: 'branding', label: 'Marca e Identidade', icon: Sparkles, group: 'workspace' },
+  quick_replies: { id: 'quick_replies', label: 'Respostas rápidas', icon: MessageSquare, group: 'workspace' },
   whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: PlugZap, group: 'workspace' },
   templates: { id: 'templates', label: 'Templates', icon: FileText, group: 'workspace' },
   fields: { id: 'fields', label: 'Campos e tags', icon: Tags, group: 'workspace' },

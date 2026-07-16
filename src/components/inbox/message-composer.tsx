@@ -5,8 +5,11 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useMemo,
   KeyboardEvent,
 } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Send,
   LayoutTemplate,
@@ -124,6 +127,57 @@ export function MessageComposer({
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const adjustHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    // Max 4 lines (~96px)
+    el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
+  }, []);
+
+  const { accountId } = useAuth();
+  const supabase = createClient();
+  const [quickReplies, setQuickReplies] = useState<Array<{ shortcut: string; message: string }>>([]);
+  const [selectedReplyIndex, setSelectedReplyIndex] = useState(0);
+
+  useEffect(() => {
+    if (!accountId) return;
+    const loadQuickReplies = async () => {
+      const { data } = await supabase
+        .from("quick_replies")
+        .select("shortcut, message")
+        .eq("account_id", accountId)
+        .order("shortcut", { ascending: true });
+      if (data) {
+        setQuickReplies(data);
+      }
+    };
+    loadQuickReplies();
+  }, [accountId]);
+
+  const filteredReplies = useMemo(() => {
+    if (!text.startsWith("/")) return [];
+    const query = text.slice(1).toLowerCase();
+    return quickReplies.filter((r) => r.shortcut.includes(query));
+  }, [text, quickReplies]);
+
+  const showPopup = filteredReplies.length > 0;
+
+  useEffect(() => {
+    setSelectedReplyIndex(0);
+  }, [text]);
+
+  const applyQuickReply = useCallback((reply: { shortcut: string; message: string }) => {
+    setText(reply.message);
+    try {
+      localStorage.setItem(`wacrm:draft:${conversationId}`, reply.message);
+    } catch {}
+    setTimeout(() => {
+      textareaRef.current?.focus();
+      adjustHeight();
+    }, 50);
+  }, [conversationId, adjustHeight]);
+
   // Media attachment state. `draft` holds an uploaded-but-not-yet-sent
   // attachment; `busy` covers the upload/transcode window.
   const [draft, setDraft] = useState<MediaDraft | null>(null);
@@ -181,14 +235,6 @@ export function MessageComposer({
     };
   }, [clearTimer, removeStaged]);
 
-  const adjustHeight = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    // Max 4 lines (~96px)
-    el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
-  }, []);
-
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || sending || sessionExpired) return;
@@ -211,12 +257,35 @@ export function MessageComposer({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (showPopup) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setSelectedReplyIndex((prev) => (prev + 1) % filteredReplies.length);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setSelectedReplyIndex((prev) => (prev - 1 + filteredReplies.length) % filteredReplies.length);
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          applyQuickReply(filteredReplies[selectedReplyIndex]);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setText("");
+          return;
+        }
+      }
+
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     },
-    [handleSend]
+    [showPopup, filteredReplies, selectedReplyIndex, applyQuickReply, handleSend]
   );
 
   // Load draft on mount / conversationId change
@@ -409,7 +478,39 @@ export function MessageComposer({
   // ---- Render --------------------------------------------------------
 
   return (
-    <div className="border-t border-border bg-card p-3">
+    <div className="border-t border-border bg-card p-3 relative">
+      {showPopup && (
+        <div className="absolute bottom-[calc(100%+8px)] left-4 z-50 max-h-60 w-80 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-lg animate-in slide-in-from-bottom-2 duration-150">
+          <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border mb-1">
+            Respostas Rápidas
+          </div>
+          <div className="space-y-0.5">
+            {filteredReplies.map((reply, idx) => {
+              const isSelected = idx === selectedReplyIndex;
+              return (
+                <button
+                  key={reply.shortcut}
+                  type="button"
+                  onClick={() => applyQuickReply(reply)}
+                  className={cn(
+                    "w-full text-left px-3 py-2 rounded-lg text-sm flex flex-col gap-0.5 transition-colors",
+                    isSelected
+                      ? "bg-primary/10 text-primary"
+                      : "text-foreground hover:bg-muted/50"
+                  )}
+                >
+                  <span className="font-semibold text-xs text-primary">
+                    /{reply.shortcut}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate w-full">
+                    {reply.message}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {replyTo && (
         <div className="mb-2">
           <ReplyQuote

@@ -18,6 +18,7 @@ import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { AiAgentSettings } from '@/components/settings/ai-agent-settings';
 import { BrandingSettings } from '@/components/settings/branding-settings';
+import { QuickRepliesSettings } from '@/components/settings/quick-replies-settings';
 import {
   resolveSection,
   type SettingsSection,
@@ -58,6 +59,7 @@ export default function SettingsPage() {
     security: <SecurityPanel />,
     appearance: <AppearancePanel />,
     branding: <BrandingSettings />,
+    quick_replies: <QuickRepliesSettings />,
     whatsapp: <WhatsAppConfig />,
     templates: <TemplateManager />,
     fields: <FieldsAndTagsPanel />,
