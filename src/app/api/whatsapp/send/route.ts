@@ -82,6 +82,7 @@ export async function POST(request: Request) {
       template_params,
       template_message_params,
       reply_to_message_id,
+      waha_session,
     } = body
 
     if ((!conversationIdInput && !contact_id) || !message_type) {
@@ -182,11 +183,25 @@ export async function POST(request: Request) {
         )
       }
 
+      let targetSession = waha_session
+      if (!targetSession) {
+        const { data: configs } = await supabase
+          .from('whatsapp_config')
+          .select('waha_session')
+          .eq('account_id', accountId)
+          .eq('provider', 'waha')
+          .limit(1)
+        if (configs && configs.length > 0) {
+          targetSession = configs[0].waha_session
+        }
+      }
+
       const resolved = await findOrCreateConversation(
         supabase,
         accountId,
         user.id,
-        contact_id
+        contact_id,
+        targetSession
       )
       if (!resolved) {
         return NextResponse.json(
@@ -225,18 +240,26 @@ export async function POST(request: Request) {
     }
 
     // Fetch and decrypt WhatsApp config
-    const { data: config, error: configError } = await supabase
+    let configQuery = supabase
       .from('whatsapp_config')
       .select('*')
       .eq('account_id', accountId)
-      .single()
 
-    if (configError || !config) {
+    if (conversation && (conversation as any).waha_session) {
+      configQuery = configQuery.eq('waha_session', (conversation as any).waha_session)
+    }
+
+    const { data: configList, error: configError } = await configQuery
+
+    const isListEmpty = !configList || (Array.isArray(configList) && configList.length === 0)
+    if (configError || isListEmpty) {
       return NextResponse.json(
         { error: 'WhatsApp not configured. Please set up your WhatsApp integration first.' },
         { status: 400 }
       )
     }
+
+    const config = Array.isArray(configList) ? configList[0] : configList
 
     let accessToken = ''
     if (config.provider === 'meta') {
@@ -475,6 +498,7 @@ export async function POST(request: Request) {
         message_id: waMessageId,
         status: 'sent',
         reply_to_message_id: reply_to_message_id || null,
+        waha_session: config.provider === 'waha' ? config.waha_session : null,
       })
       .select()
       .single()
@@ -492,6 +516,10 @@ export async function POST(request: Request) {
       last_message_text: content_text || `[${message_type}]`,
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+    }
+
+    if (config.provider === 'waha' && !(conversation as any).waha_session) {
+      convUpdate.waha_session = config.waha_session
     }
 
     if (!(conversation as any).assigned_agent_id) {
@@ -562,23 +590,36 @@ async function findOrCreateConversation(
   accountId: string,
   userId: string,
   contactId: string,
+  wahaSession?: string,
 ) {
-  const { data: existing } = await supabase
+  let query = supabase
     .from('conversations')
     .select('*, contact:contacts(*)')
     .eq('account_id', accountId)
     .eq('contact_id', contactId)
-    .maybeSingle()
+
+  if (wahaSession) {
+    query = query.eq('waha_session', wahaSession)
+  } else {
+    query = query.is('waha_session', null)
+  }
+
+  const { data: existing } = await query.maybeSingle()
 
   if (existing) return existing
 
+  const insertObj: any = {
+    account_id: accountId,
+    user_id: userId,
+    contact_id: contactId,
+  }
+  if (wahaSession) {
+    insertObj.waha_session = wahaSession
+  }
+
   const { data: created, error } = await supabase
     .from('conversations')
-    .insert({
-      account_id: accountId,
-      user_id: userId,
-      contact_id: contactId,
-    })
+    .insert(insertObj)
     .select('*, contact:contacts(*)')
     .single()
 
