@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
-import { Coins, Loader2, Play, Trash2, Clock, Upload, Building, Image } from "lucide-react";
+import { Coins, Loader2, Play, Trash2, Clock } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -42,98 +42,6 @@ export function DealsSettings() {
     profileLoading,
     refreshProfile,
   } = useAuth();
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-
-  const ALLOWED_MIME = new Set([
-    'image/png',
-    'image/jpeg',
-    'image/webp',
-    'image/gif',
-  ]);
-  const MAX_LOGO_BYTES = 2 * 1024 * 1024;
-
-  const onPickLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !accountId) return;
-
-    if (!ALLOWED_MIME.has(file.type)) {
-      toast.error('Tipo de imagem não suportado', {
-        description: 'Use PNG, JPG, WebP ou GIF.',
-      });
-      return;
-    }
-    if (file.size > MAX_LOGO_BYTES) {
-      toast.error('Imagem muito grande', {
-        description: 'Tamanho máximo permitido: 2 MB.',
-      });
-      return;
-    }
-
-    setUploadingLogo(true);
-    try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
-      const path = `${accountId}/logo-${Date.now()}.${ext}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('logos')
-        .upload(path, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: file.type,
-        });
-
-      if (uploadError) {
-        throw new Error(`Upload falhou: ${uploadError.message}`);
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('logos').getPublicUrl(path);
-
-      const res = await fetch("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logo_url: publicUrl }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Falha ao salvar a nova logo");
-      }
-
-      await refreshProfile();
-      toast.success("Logotipo do CRM atualizado com sucesso!");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao fazer upload da logo");
-    } finally {
-      setUploadingLogo(false);
-    }
-  };
-
-  const onRemoveLogo = async () => {
-    if (!accountId) return;
-    setUploadingLogo(true);
-    try {
-      const res = await fetch("/api/account", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logo_url: null }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Falha ao remover a logo");
-      }
-
-      await refreshProfile();
-      toast.success("Logotipo removido!");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao remover logo");
-    } finally {
-      setUploadingLogo(false);
-    }
-  };
 
   const [selectedCurrency, setSelectedCurrency] = useState(defaultCurrency);
   const [savingCurrency, setSavingCurrency] = useState(false);
@@ -298,80 +206,9 @@ export function DealsSettings() {
   return (
     <section className="max-w-3xl space-y-6 animate-in fade-in-50 duration-200">
       <SettingsPanelHead
-        title="Configurações do Workspace"
-        description="Personalize o logotipo, a moeda e gerencie as regras de automação de negócios do CRM."
+        title="Configurações de Negócios"
+        description="Gerencie a moeda padrão e as regras de automação de negócios do CRM."
       />
-
-      {/* Logo Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-foreground">
-            <Building className="size-4 text-primary" />
-            Logotipo do CRM
-          </CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Envie uma imagem para personalizar o cabeçalho e o menu lateral do seu CRM.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-border bg-muted overflow-hidden">
-              {account?.logo_url ? (
-                <img
-                  src={account.logo_url}
-                  alt={account.name}
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <Image className="h-8 w-8 text-muted-foreground/60" />
-              )}
-            </div>
-            
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={onPickLogo}
-                  accept="image/png, image/jpeg, image/webp, image/gif"
-                  className="hidden"
-                  disabled={!canEditSettings || uploadingLogo}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!canEditSettings || uploadingLogo}
-                  className="flex items-center gap-2"
-                >
-                  {uploadingLogo ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  Enviar imagem
-                </Button>
-                
-                {account?.logo_url && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={onRemoveLogo}
-                    disabled={!canEditSettings || uploadingLogo}
-                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Remover
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Tamanho máximo de 2 MB. Formatos suportados: PNG, JPG, WebP ou GIF.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Currency Card */}
       <Card>

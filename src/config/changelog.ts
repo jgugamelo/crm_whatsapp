@@ -7,15 +7,14 @@ export interface ChangelogEntry {
 }
 
 export const CURRENT_CHANGELOG: ChangelogEntry = {
-  version: "0.3.0",
+  version: "0.3.1",
   date: "16/07/2026",
-  title: "Integração WAHA e Correções de Infraestrutura 🚀",
-  description: "Nesta atualização, trouxemos a integração completa com o WAHA para conexões diretas do WhatsApp Web e diversas otimizações de banco de dados.",
+  title: "Customização de Marca e Identidade do CRM 🎨",
+  description: "Nesta atualização, adicionamos a possibilidade de personalizar a identidade do seu CRM, incluindo o nome e o logotipo corporativo diretamente nas configurações.",
   items: [
-    "Integração oficial com WAHA (WhatsApp HTTP API) adicionada às configurações.",
-    "Criptografia de segurança interna (ENCRYPTION_KEY) ativada para proteger suas chaves na VPS.",
-    "Correções e otimizações de migração aplicadas no banco de dados.",
-    "Suporte para upload de logos empresariais customizados.",
-    "Correção na detecção do status de sessões."
+    "Possibilidade de personalizar o Nome do CRM/Workspace diretamente no painel de controle.",
+    "Suporte para upload e remoção de logotipos corporativos customizados.",
+    "Atualização em tempo real do nome e logo no menu lateral e cabeçalho do sistema.",
+    "Integração oficial com WAHA (WhatsApp HTTP API) para conexões diretas do WhatsApp Web."
   ]
 };

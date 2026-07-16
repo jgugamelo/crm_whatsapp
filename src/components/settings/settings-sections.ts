@@ -10,6 +10,7 @@ import {
   User,
   UsersRound,
   Bot,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -26,6 +27,7 @@ export const SETTINGS_SECTIONS = [
   'profile',
   'security',
   'appearance',
+  'branding',
   'whatsapp',
   'templates',
   'fields',
@@ -52,6 +54,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   profile: { id: 'profile', label: 'Seu perfil', icon: User, group: 'account' },
   security: { id: 'security', label: 'Login e segurança', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Aparência', icon: Palette, group: 'account' },
+  branding: { id: 'branding', label: 'Marca e Identidade', icon: Sparkles, group: 'workspace' },
   whatsapp: { id: 'whatsapp', label: 'WhatsApp', icon: PlugZap, group: 'workspace' },
   templates: { id: 'templates', label: 'Templates', icon: FileText, group: 'workspace' },
   fields: { id: 'fields', label: 'Campos e tags', icon: Tags, group: 'workspace' },

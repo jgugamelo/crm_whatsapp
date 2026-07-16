@@ -289,14 +289,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchProfile]);
 
-  // Dynamic Favicon sync based on account logo
+  // Dynamic Title and Favicon sync based on account/CRM name and logo
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // 1. Sync Favicon
     const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
     if (link) {
       link.href = account?.logo_url || "/icon";
     }
-  }, [account?.logo_url]);
+
+    // 2. Sync Document Title
+    const name = account?.name;
+    if (!name) return;
+
+    const updateTitle = () => {
+      const currentTitle = document.title;
+      if (currentTitle.endsWith(" — wacrm")) {
+        document.title = currentTitle.replace(/ — wacrm$/, ` — ${name}`);
+      } else if (currentTitle === "wacrm") {
+        document.title = name;
+      }
+    };
+
+    updateTitle();
+
+    const titleEl = document.querySelector("title");
+    if (!titleEl) return;
+
+    const observer = new MutationObserver(() => {
+      updateTitle();
+    });
+
+    observer.observe(titleEl, { childList: true });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [account?.logo_url, account?.name]);
 
   const signOut = useCallback(async () => {
     const supabase = createClient();
