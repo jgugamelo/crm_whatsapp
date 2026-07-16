@@ -12,6 +12,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
+import { useTotalUnread } from "./use-total-unread";
 import {
   canEditSettings as canEditSettingsFor,
   canManageMembers as canManageMembersFor,
@@ -113,6 +114,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * component, avoiding internal lock contention in the Supabase client.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const unreadCount = useTotalUnread();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [account, setAccount] = useState<AccountSummary | null>(null);
@@ -289,7 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchProfile]);
 
-  // Dynamic Title and Favicon sync based on account/CRM name and logo
+  // Dynamic Title and Favicon sync based on account/CRM name, logo, and unread count
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -300,15 +302,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // 2. Sync Document Title
-    const name = account?.name;
-    if (!name) return;
+    const name = account?.name || "wacrm";
 
     const updateTitle = () => {
-      const currentTitle = document.title;
+      let currentTitle = document.title;
+      // Strip any existing unread count prefix e.g. "(12) " -> ""
+      currentTitle = currentTitle.replace(/^\(\d+\)\s*/, "");
+
+      let nextTitle = currentTitle;
       if (currentTitle.endsWith(" — wacrm")) {
-        document.title = currentTitle.replace(/ — wacrm$/, ` — ${name}`);
+        nextTitle = currentTitle.replace(/ — wacrm$/, ` — ${name}`);
       } else if (currentTitle === "wacrm") {
-        document.title = name;
+        nextTitle = name;
+      }
+
+      if (unreadCount > 0) {
+        nextTitle = `(${unreadCount}) ${nextTitle}`;
+      }
+
+      if (document.title !== nextTitle) {
+        document.title = nextTitle;
       }
     };
 
@@ -326,7 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       observer.disconnect();
     };
-  }, [account?.logo_url, account?.name]);
+  }, [account?.logo_url, account?.name, unreadCount]);
 
   const signOut = useCallback(async () => {
     const supabase = createClient();
