@@ -339,6 +339,8 @@ export async function POST(request: Request) {
         existing = data
       }
 
+      let savedId = existing?.id || null
+
       if (existing) {
         if (waha_api_key === MASKED_TOKEN) {
           wahaConfigObj.waha_api_key = existing.waha_api_key
@@ -357,14 +359,17 @@ export async function POST(request: Request) {
         }
       } else {
         wahaConfigObj.waha_api_key = encryptedApiKey
-        const { error: insertError } = await supabase
+        const { data: insertedData, error: insertError } = await supabase
           .from('whatsapp_config')
           .insert(wahaConfigObj)
+          .select('id')
+          .single()
 
         if (insertError) {
           console.error('Error inserting config:', insertError)
           return NextResponse.json({ error: insertError.message }, { status: 500 })
         }
+        savedId = insertedData?.id
       }
 
       // Auto-start the session in WAHA
@@ -386,7 +391,7 @@ export async function POST(request: Request) {
         console.warn('Could not auto-start WAHA session:', err)
       }
 
-      return NextResponse.json({ success: true, message: 'WAHA configuration saved.' })
+      return NextResponse.json({ success: true, id: savedId, message: 'WAHA configuration saved.' })
     }
 
     if (!access_token || !phone_number_id) {
@@ -581,6 +586,8 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     }
 
+    let savedId = existing?.id || null
+
     if (existing) {
       const { error: updateError } = await supabase
         .from('whatsapp_config')
@@ -599,13 +606,15 @@ export async function POST(request: Request) {
       // (NOT NULL post-017, UNIQUE so duplicates trip the constraint
       // up-front), `user_id` is the audit column identifying which
       // member of the account saved the config.
-      const { error: insertError } = await supabase
+      const { data: insertedData, error: insertError } = await supabase
         .from('whatsapp_config')
         .insert({
           account_id: accountId,
           user_id: user.id,
           ...baseRow,
         })
+        .select('id')
+        .single()
 
       if (insertError) {
         console.error('Error inserting whatsapp_config:', insertError)
@@ -614,6 +623,7 @@ export async function POST(request: Request) {
           { status: 500 }
         )
       }
+      savedId = insertedData?.id
     }
 
     if (registrationError) {
@@ -622,6 +632,7 @@ export async function POST(request: Request) {
       // remediation step instead of a generic toast.
       return NextResponse.json({
         success: false,
+        id: savedId,
         saved: true,
         registered: false,
         registration_error: registrationError,
@@ -631,6 +642,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      id: savedId,
       saved: true,
       registered: registeredAt != null,
       // Credentials are valid and saved, but inbound webhook

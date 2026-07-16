@@ -216,7 +216,7 @@ export function WhatsAppConfig() {
     }
   }, [accountId, wahaSession]);
 
-  const fetchConfig = useCallback(async (acctId: string) => {
+  const fetchConfig = useCallback(async (selectId?: string | null) => {
     setLoading(true);
     try {
       const res = await fetch('/api/whatsapp/config', { method: 'GET' });
@@ -228,7 +228,8 @@ export function WhatsAppConfig() {
       // Keep active configuration selected, or select the first one, or leave empty/new if none exist
       let selected = null;
       if (list.length > 0) {
-        selected = list.find((c: any) => c.id === activeConfigId) || list[0];
+        const targetId = selectId || activeConfigId;
+        selected = list.find((c: any) => c.id === targetId) || list[0];
       }
       
       selectConfig(selected);
@@ -266,7 +267,7 @@ export function WhatsAppConfig() {
     }
     if (!hasFetchedConfigRef.current) {
       hasFetchedConfigRef.current = true;
-      fetchConfig(accountId);
+      fetchConfig();
     }
   }, [authLoading, profileLoading, user, accountId, fetchConfig]);
 
@@ -429,7 +430,7 @@ export function WhatsAppConfig() {
           provider: 'waha',
           waha_url: wahaUrl.trim(),
           waha_session: wahaSession.trim(),
-          waha_api_key: wahaApiKeyEdited ? wahaApiKey.trim() : MASKED_TOKEN,
+          waha_api_key: wahaApiKeyEdited ? wahaApiKey.trim() : (activeConfigId ? MASKED_TOKEN : ''),
         };
         if (activeConfigId) {
           payload.id = activeConfigId;
@@ -447,7 +448,10 @@ export function WhatsAppConfig() {
         }
 
         toast.success(data.message || 'WAHA configuration saved.');
-        if (accountId) fetchConfig(accountId);
+        if (data.id) {
+          setActiveConfigId(data.id);
+        }
+        fetchConfig(data.id);
       } catch (err: any) {
         console.error('Save WAHA config error:', err);
         toast.error(err.message || 'Failed to save WAHA configuration');
@@ -501,7 +505,10 @@ export function WhatsAppConfig() {
       }
 
       toast.success('WhatsApp API Configuration saved successfully!');
-      if (accountId) fetchConfig(accountId);
+      if (data.id) {
+        setActiveConfigId(data.id);
+      }
+      fetchConfig(data.id);
     } catch (err: any) {
       console.error('Save config error:', err);
       toast.error(err.message || 'Failed to save configuration');
@@ -555,7 +562,7 @@ export function WhatsAppConfig() {
 
       toast.success('Configuration cleared successfully');
       setActiveConfigId(null);
-      if (accountId) fetchConfig(accountId);
+      fetchConfig();
     } catch (err: any) {
       console.error('Reset config error:', err);
       toast.error(err.message || 'Failed to clear configuration');
@@ -696,7 +703,7 @@ export function WhatsAppConfig() {
                                   if (!res.ok) throw new Error('Erro ao deletar linha');
                                   toast.success('Linha removida com sucesso!');
                                   if (isActive) setActiveConfigId(null);
-                                  if (accountId) fetchConfig(accountId);
+                                  fetchConfig();
                                 } catch (err: any) {
                                   toast.error(err.message || 'Erro ao deletar linha');
                                 }
