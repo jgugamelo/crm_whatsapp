@@ -314,14 +314,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     updateTitle();
 
-    const titleEl = document.querySelector("title");
-    if (!titleEl) return;
+    const headEl = document.querySelector("head");
+    if (!headEl) return;
 
     const observer = new MutationObserver(() => {
       updateTitle();
     });
 
-    observer.observe(titleEl, { childList: true });
+    observer.observe(headEl, { childList: true, subtree: true });
 
     return () => {
       observer.disconnect();
