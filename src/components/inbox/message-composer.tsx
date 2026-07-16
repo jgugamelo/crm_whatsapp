@@ -297,6 +297,9 @@ export function MessageComposer({
       setText(saved || "");
       setTimeout(() => {
         adjustHeight();
+        if (window.innerWidth >= 1024) {
+          textareaRef.current?.focus();
+        }
       }, 50);
     } catch {
       setText("");
