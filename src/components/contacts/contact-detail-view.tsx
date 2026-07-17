@@ -27,6 +27,12 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Phone,
   Mail,
   Building2,
@@ -40,6 +46,7 @@ import {
   DollarSign,
   LayoutTemplate,
   MessageSquare,
+  ChevronDown,
 } from 'lucide-react';
 
 interface ContactDetailViewProps {
@@ -69,6 +76,8 @@ export function ContactDetailView({
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [configs, setConfigs] = useState<any[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string>('');
 
   const handleGoToChat = async () => {
     if (!contact || !accountId) return;
@@ -77,7 +86,7 @@ export function ContactDetailView({
       // 1. Check if a conversation already exists
       const { data: existing, error: fetchErr } = await supabase
         .from('conversations')
-        .select('id')
+        .select('id, waha_session')
         .eq('account_id', accountId)
         .eq('contact_id', contact.id)
         .maybeSingle();
@@ -85,20 +94,21 @@ export function ContactDetailView({
       if (fetchErr) throw fetchErr;
 
       if (existing) {
+        // If the user has chosen a specific session, and it's different from the conversation's current one, update it!
+        if (selectedSession && existing.waha_session !== selectedSession) {
+          const { error: updateErr } = await supabase
+            .from('conversations')
+            .update({ waha_session: selectedSession })
+            .eq('id', existing.id);
+          if (updateErr) throw updateErr;
+        }
+
         router.push(`/inbox?c=${existing.id}`);
         onOpenChange(false);
         return;
       }
 
-      // 2. If it does not exist, check if there is an active WAHA session configured
-      const { data: configs } = await supabase
-        .from('whatsapp_config')
-        .select('provider, waha_session')
-        .eq('account_id', accountId);
-
-      const wahaConfig = configs?.find((c) => c.provider === 'waha');
-
-      // 3. Create a new conversation
+      // 2. Create a new conversation
       const insertData: Record<string, any> = {
         account_id: accountId,
         contact_id: contact.id,
@@ -107,8 +117,8 @@ export function ContactDetailView({
         user_id: user?.id || null,
       };
 
-      if (wahaConfig?.waha_session) {
-        insertData.waha_session = wahaConfig.waha_session;
+      if (selectedSession) {
+        insertData.waha_session = selectedSession;
       }
 
       const { data: created, error: createErr } = await supabase
@@ -249,8 +259,35 @@ export function ContactDetailView({
       fetchNotes();
       fetchCustomFields();
       fetchDeals();
+
+      // Fetch WhatsApp configurations and initialize selected session
+      (async () => {
+        if (!accountId) return;
+        try {
+          const res = await fetch('/api/whatsapp/config');
+          const data = await res.json();
+          const list = data.configs || [];
+          setConfigs(list);
+
+          const { data: conv } = await supabase
+            .from('conversations')
+            .select('waha_session')
+            .eq('account_id', accountId)
+            .eq('contact_id', contactId)
+            .maybeSingle();
+
+          if (conv?.waha_session) {
+            setSelectedSession(conv.waha_session);
+          } else if (list.length > 0) {
+            const wahaSession = list.find((c: any) => c.provider === 'waha')?.waha_session || list[0].waha_session;
+            setSelectedSession(wahaSession || '');
+          }
+        } catch (err) {
+          console.error('Failed to load configs:', err);
+        }
+      })();
     }
-  }, [open, contactId, fetchContact, fetchTags, fetchNotes, fetchCustomFields, fetchDeals]);
+  }, [open, contactId, accountId, fetchContact, fetchTags, fetchNotes, fetchCustomFields, fetchDeals, supabase]);
 
   async function copyPhone() {
     if (!contact) return;
@@ -410,6 +447,7 @@ export function ContactDetailView({
           message_type: 'template',
           template_name: template.name,
           template_language: template.language,
+          waha_session: selectedSession || undefined,
           template_message_params: {
             body: values.body,
             headerText: values.headerText,
@@ -501,35 +539,60 @@ export function ContactDetailView({
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => setTemplatePickerOpen(true)}
-                  disabled={sendingTemplate || loadingChat}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  {sendingTemplate ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <LayoutTemplate className="size-4" />
-                  )}
-                  Enviar template
-                </Button>
+              <div className="mt-3 flex items-center justify-between gap-2 flex-wrap w-full">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => setTemplatePickerOpen(true)}
+                    disabled={sendingTemplate || loadingChat}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {sendingTemplate ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <LayoutTemplate className="size-4" />
+                    )}
+                    Enviar template
+                  </Button>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleGoToChat}
-                  disabled={sendingTemplate || loadingChat}
-                  className="border-border text-foreground hover:bg-muted"
-                >
-                  {loadingChat ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <MessageSquare className="size-4" />
-                  )}
-                  Ir para o chat
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleGoToChat}
+                    disabled={sendingTemplate || loadingChat}
+                    className="border-border text-foreground hover:bg-muted"
+                  >
+                    {loadingChat ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <MessageSquare className="size-4" />
+                    )}
+                    Ir para o chat
+                  </Button>
+                </div>
+
+                {configs.length > 1 && (
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <span className="text-[10px] text-muted-foreground font-light">Linha:</span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="h-8 border border-border text-xs px-2.5 font-normal flex items-center gap-1 rounded-md bg-transparent hover:bg-muted text-foreground transition-colors">
+                        {configs.find(c => c.waha_session === selectedSession)?.phone_info?.display_phone_number || selectedSession || "Selecione..."}
+                        <ChevronDown className="size-3 text-muted-foreground" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="border-border bg-popover">
+                        {configs.map((c) => (
+                          <DropdownMenuItem
+                            key={c.id}
+                            onClick={() => setSelectedSession(c.waha_session)}
+                            className="text-xs text-foreground hover:bg-muted cursor-pointer"
+                          >
+                            {c.phone_info?.display_phone_number || c.waha_session}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
               </div>
             </SheetHeader>
 
