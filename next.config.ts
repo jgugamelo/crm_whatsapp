@@ -16,6 +16,20 @@ import type { NextConfig } from "next";
  *     deny them. A supply-chain compromise or a forgotten plugin
  *     can't silently opt back in.
  */
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+let supabaseOrigin = "";
+let supabaseWss = "";
+
+if (supabaseUrl) {
+  try {
+    const url = new URL(supabaseUrl);
+    supabaseOrigin = url.origin;
+    supabaseWss = supabaseUrl.replace(/^http/, "ws");
+  } catch (e) {
+    console.error("Failed to parse NEXT_PUBLIC_SUPABASE_URL:", e);
+  }
+}
+
 const SECURITY_HEADERS = [
   {
     key: "Strict-Transport-Security",
@@ -48,17 +62,17 @@ const SECURITY_HEADERS = [
       "img-src 'self' data: blob: https:",
       // Outbound media previews (blob: from MediaRecorder + file picker)
       // and Supabase public-bucket audio/video the inbox renders.
-      "media-src 'self' blob: https://*.supabase.co",
+      `media-src 'self' blob: https://*.supabase.co ${supabaseOrigin}`.trim(),
       "font-src 'self' data:",
       // Supabase REST + realtime (WSS). All Meta API calls happen
       // server-side, so graph.facebook.com does not belong here.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      `connect-src 'self' https://*.supabase.co wss://*.supabase.co ${supabaseOrigin} ${supabaseWss}`.trim(),
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; "),
   },
-] as const;
+];
 
 const nextConfig: NextConfig = {
   output: "standalone",
