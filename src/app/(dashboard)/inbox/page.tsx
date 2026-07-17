@@ -636,6 +636,7 @@ export default function InboxPage() {
             contactPanelOpen={contactPanelOpen}
             onToggleContactPanel={handleToggleContactPanel}
             onDeleteConversation={handleDeleteConversation}
+            onUpdateConversation={handleUpdateActiveConversation}
           />
         </div>
 

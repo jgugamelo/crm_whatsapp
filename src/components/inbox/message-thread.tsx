@@ -113,6 +113,7 @@ interface MessageThreadProps {
   onToggleContactPanel?: () => void;
   whatsappProvider?: string;
   onDeleteConversation?: (conversationId: string) => Promise<void>;
+  onUpdateConversation?: (updates: Partial<Conversation>) => void;
 }
 
 function formatDateSeparator(dateStr: string): string {
@@ -173,22 +174,25 @@ export function MessageThread({
   onToggleContactPanel,
   whatsappProvider = "meta",
   onDeleteConversation,
+  onUpdateConversation,
 }: MessageThreadProps) {
   const { user } = useAuth();
   const [voipSession, setVoipSession] = useState<string>("default");
+  const [configs, setConfigs] = useState<any[]>([]);
 
   useEffect(() => {
-    // Fetch the active session name for VoIP routing
+    // Fetch configurations and set the active session name for VoIP routing
     fetch("/api/whatsapp/config")
       .then((res) => res.json())
       .then((data) => {
+        setConfigs(data.configs || []);
         if (data && data.provider === "waha" && data.phone_info?.id) {
           setVoipSession(data.phone_info.id);
         } else if (data && data.waha_session) {
           setVoipSession(data.waha_session);
         }
       })
-      .catch((err) => console.warn("VoIP config fetch failed, using default:", err));
+      .catch((err) => console.warn("VoIP/Line config fetch failed, using default:", err));
   }, []);
 
   const {
@@ -241,6 +245,25 @@ export function MessageThread({
       setIsDeleting(false);
     }
   }, [conversation, onDeleteConversation]);
+
+  const handleLineChange = async (sessionName: string) => {
+    if (!conversation) return;
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("conversations")
+        .update({ waha_session: sessionName })
+        .eq("id", conversation.id);
+
+      if (error) throw error;
+
+      onUpdateConversation?.({ waha_session: sessionName });
+      toast.success("Linha alterada com sucesso!");
+    } catch (err: any) {
+      console.error("Failed to change WhatsApp line:", err);
+      toast.error("Erro ao alterar linha do WhatsApp: " + (err.message || err));
+    }
+  };
 
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
 
@@ -1038,6 +1061,33 @@ export function MessageThread({
                 <Trash2 className="h-3.5 w-3.5" />
               )}
             </button>
+          )}
+
+          {/* WhatsApp Line dropdown */}
+          {configs.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted text-primary font-medium">
+                Linha: {configs.find(c => c.waha_session === conversation.waha_session)?.phone_info?.display_phone_number || conversation.waha_session || "Selecione..."}
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="border-border bg-popover"
+              >
+                {configs.map((c) => (
+                  <DropdownMenuItem
+                    key={c.id}
+                    onClick={() => handleLineChange(c.waha_session)}
+                    className={cn(
+                      "text-sm cursor-pointer",
+                      conversation.waha_session === c.waha_session ? "text-primary font-medium" : "text-foreground"
+                    )}
+                  >
+                    {c.phone_info?.display_phone_number || c.waha_session}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           {/* Status dropdown */}
