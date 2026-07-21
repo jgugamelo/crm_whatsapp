@@ -269,18 +269,42 @@ export async function sendWahaMediaMessage(
 ): Promise<WahaSendResult> {
   const chatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
 
+  // Fetch the file from the media URL and convert to Base64
+  // This bypasses any network restrictions/proxies between the WAHA container and Supabase
+  let base64Data = '';
+  try {
+    const fileRes = await fetch(mediaUrl);
+    if (!fileRes.ok) {
+      throw new Error(`Failed to fetch media from URL (${fileRes.status}): ${fileRes.statusText}`);
+    }
+    const arrayBuffer = await fileRes.arrayBuffer();
+    base64Data = Buffer.from(arrayBuffer).toString('base64');
+  } catch (err: any) {
+    console.error('[waha-api] Failed to convert media to Base64, falling back to URL:', err);
+  }
+
+  const filePayload: Record<string, any> = {
+    name: filename || `file_${Date.now()}`,
+    mimetype: getMimeType(filename || '', mediaType),
+  };
+
+  if (base64Data) {
+    filePayload.data = base64Data;
+  } else {
+    filePayload.url = mediaUrl;
+  }
+
   const payload = {
     chatId,
-    file: {
-      url: mediaUrl,
-      name: filename || `file_${Date.now()}`,
-      mimetype: getMimeType(filename || '', mediaType),
-    },
+    file: filePayload,
     caption: caption || '',
     session: config.waha_session,
   };
 
-  const res = await wahaFetch(config, '/api/sendFile', {
+  // WAHA requires sendVoice endpoint to render audio as PTT/Voice Note in WhatsApp
+  const endpoint = mediaType === 'audio' ? '/api/sendVoice' : '/api/sendFile';
+
+  const res = await wahaFetch(config, endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -288,7 +312,7 @@ export async function sendWahaMediaMessage(
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`WAHA sendFile failed (${res.status}): ${errText}`);
+    throw new Error(`WAHA media send failed (${res.status}): ${errText}`);
   }
 
   const data = await res.json();
