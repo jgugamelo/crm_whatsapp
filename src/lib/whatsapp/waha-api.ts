@@ -313,8 +313,15 @@ export async function sendWahaMediaMessage(
     session: config.waha_session,
   };
 
-  // WAHA requires sendVoice endpoint to render audio as PTT/Voice Note in WhatsApp
-  const endpoint = mediaType === 'audio' ? '/api/sendVoice' : '/api/sendFile';
+  // Route media types to correct WAHA native media endpoints
+  let endpoint = '/api/sendFile';
+  if (mediaType === 'image') {
+    endpoint = '/api/sendImage';
+  } else if (mediaType === 'video') {
+    endpoint = '/api/sendVideo';
+  } else if (mediaType === 'audio') {
+    endpoint = '/api/sendVoice';
+  }
 
   const res = await wahaFetch(config, endpoint, {
     method: 'POST',
