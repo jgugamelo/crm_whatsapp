@@ -78,6 +78,46 @@ export async function startWahaSession(config: WahaConfig, webhookUrl?: string):
   const currentStatus = await getWahaSessionStatus(config);
   if (currentStatus === 'WORKING') {
     console.log(`[waha-api] Session "${config.waha_session}" is already WORKING. Skipping creation/restart to avoid disconnection.`);
+    
+    // Dynamically update the webhooks and proxy config of the running session
+    if (webhookUrl || config.proxy_enabled) {
+      console.log(`[waha-api] Dynamically updating configuration for running session "${config.waha_session}"`);
+      const sessionConfig: Record<string, any> = {};
+      if (webhookUrl) {
+        sessionConfig.webhooks = [
+          {
+            url: webhookUrl,
+            events: ['message'],
+          }
+        ];
+      }
+      if (config.proxy_enabled && config.proxy_server) {
+        sessionConfig.proxy = {
+          server: config.proxy_server.trim(),
+          username: config.proxy_username?.trim() || undefined,
+          password: config.proxy_password?.trim() || undefined,
+        };
+      }
+      
+      try {
+        await wahaFetch(config, `/api/sessions/${config.waha_session}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config: sessionConfig }),
+        });
+      } catch (err) {
+        console.warn(`[waha-api] Failed to PATCH session config, trying PUT:`, err);
+        try {
+          await wahaFetch(config, `/api/sessions/${config.waha_session}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: config.waha_session, config: sessionConfig }),
+          });
+        } catch (putErr) {
+          console.error(`[waha-api] Failed to update session config dynamically:`, putErr);
+        }
+      }
+    }
     return;
   }
 

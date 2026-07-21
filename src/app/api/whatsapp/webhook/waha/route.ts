@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     // ============================================================
     // 2. Incoming and outgoing message synchronization
     // ============================================================
-    if (event === 'message.any') {
+    if (event === 'message' || event === 'message.any') {
       console.log('[waha/webhook] Message event received. Payload:', JSON.stringify(payload))
       const { id: messageId, timestamp, from, to, body: textBody, fromMe, hasMedia, type, chatId } = payload
       
