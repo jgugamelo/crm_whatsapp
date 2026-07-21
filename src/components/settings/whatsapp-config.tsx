@@ -77,6 +77,13 @@ export function WhatsAppConfig() {
   const [sessionStatus, setSessionStatus] = useState<string>('STOPPED');
   const [qrTrigger, setQrTrigger] = useState(0);
   const [wahaConnecting, setWahaConnecting] = useState(false);
+  const [wahaServerStatus, setWahaServerStatus] = useState<{
+    loading: boolean;
+    online: boolean;
+    sessions: any[];
+    message?: string;
+  }>({ loading: false, online: false, sessions: [] });
+  const [checkingSession, setCheckingSession] = useState(false);
 
   // VoIP States
   const [voipBaseUrl, setVoipBaseUrl] = useState<string>('');
@@ -216,6 +223,87 @@ export function WhatsAppConfig() {
     }
   }, [accountId, wahaSession]);
 
+  const checkWahaServerStatus = useCallback(async () => {
+    const currentUrl = wahaUrl.trim();
+    if (!currentUrl) return;
+
+    setWahaServerStatus((prev) => ({ ...prev, loading: true }));
+    try {
+      const params = new URLSearchParams();
+      params.append('waha_url', currentUrl);
+      if (wahaApiKeyEdited) {
+        params.append('waha_api_key', wahaApiKey.trim());
+      } else {
+        params.append('waha_api_key', MASKED_TOKEN);
+      }
+
+      const res = await fetch(`/api/whatsapp/waha/status?${params.toString()}`);
+      const data = await res.json();
+
+      setWahaServerStatus({
+        loading: false,
+        online: !!data.online,
+        sessions: data.sessions || [],
+        message: data.message,
+      });
+    } catch (err: any) {
+      setWahaServerStatus({
+        loading: false,
+        online: false,
+        sessions: [],
+        message: err.message || 'Erro ao conectar ao servidor WAHA',
+      });
+    }
+  }, [wahaUrl, wahaApiKey, wahaApiKeyEdited]);
+
+  const handleVerifySessionName = async () => {
+    if (!wahaSession.trim()) {
+      toast.error('Por favor, informe o nome da sessão primeiro.');
+      return;
+    }
+    if (!wahaUrl.trim()) {
+      toast.error('Por favor, informe a URL do servidor WAHA primeiro.');
+      return;
+    }
+
+    setCheckingSession(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('waha_url', wahaUrl.trim());
+      params.append('session', wahaSession.trim());
+      if (wahaApiKeyEdited) {
+        params.append('waha_api_key', wahaApiKey.trim());
+      } else {
+        params.append('waha_api_key', MASKED_TOKEN);
+      }
+
+      const res = await fetch(`/api/whatsapp/waha/status?${params.toString()}`);
+      const data = await res.json();
+
+      if (data.online) {
+        if (data.status === 'WORKING') {
+          toast.success(`Instância "${wahaSession}" está conectada e ativa!`);
+          setSessionStatus('WORKING');
+          setConnectionStatus('connected');
+        } else if (data.status === 'SCAN_QR' || data.status === 'SCAN_QR_CODE') {
+          toast.warning(`Instância "${wahaSession}" está ativa mas aguarda pareamento (QR Code).`);
+          setSessionStatus(data.status);
+          setConnectionStatus('disconnected');
+        } else {
+          toast.info(`Instância "${wahaSession}" encontrada no servidor. Status: ${data.status}`);
+          setSessionStatus(data.status || 'STOPPED');
+          setConnectionStatus('disconnected');
+        }
+      } else {
+        toast.error(data.message || 'Servidor WAHA offline.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao verificar status da instância.');
+    } finally {
+      setCheckingSession(false);
+    }
+  };
+
   const fetchConfig = useCallback(async (selectId?: string | null) => {
     setLoading(true);
     try {
@@ -257,6 +345,13 @@ export function WhatsAppConfig() {
 
     return () => clearInterval(interval);
   }, [provider, accountId, sessionStatus, checkWahaStatus]);
+
+  // Fetch general WAHA server status when selecting active config
+  useEffect(() => {
+    if (provider === 'waha' && wahaUrl) {
+      checkWahaServerStatus();
+    }
+  }, [activeConfigId, provider]);
 
   const hasFetchedConfigRef = useRef(false);
   useEffect(() => {
@@ -789,12 +884,126 @@ export function WhatsAppConfig() {
             </CardContent>
           </Card>
 
+          {/* WAHA Server General Status Card */}
+          {provider === 'waha' && (
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-foreground flex items-center justify-between">
+                  <span className="text-sm font-semibold">Status Geral do Servidor WAHA</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={checkWahaServerStatus}
+                    disabled={wahaServerStatus.loading || !wahaUrl.trim()}
+                    className="border-border h-7 text-xs flex gap-1.5"
+                  >
+                    {wahaServerStatus.loading ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3" />
+                    )}
+                    Atualizar
+                  </Button>
+                </CardTitle>
+                <CardDescription className="text-muted-foreground font-light text-xs">
+                  Verifique a conexão com o servidor WAHA e veja todas as instâncias ativas.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Server Online Badge */}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Status do Servidor:</span>
+                  {wahaServerStatus.loading ? (
+                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="size-3 animate-spin" /> Verificando...
+                    </span>
+                  ) : wahaServerStatus.online ? (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-950/40 text-emerald-400 border border-emerald-800/40">
+                      <span className="size-1 rounded-full bg-emerald-400"></span>
+                      Online
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-950/40 text-red-400 border border-red-800/40">
+                      <span className="size-1 rounded-full bg-red-400"></span>
+                      Offline
+                    </span>
+                  )}
+                  {wahaServerStatus.sessions.length > 0 && (
+                    <span className="text-[11px] text-muted-foreground ml-auto">
+                      {wahaServerStatus.sessions.length} instâncias encontradas
+                    </span>
+                  )}
+                </div>
+
+                {wahaServerStatus.message && !wahaServerStatus.online && (
+                  <p className="text-[11px] text-red-400/90 leading-relaxed bg-red-950/15 border border-red-900/30 p-2 rounded">
+                    {wahaServerStatus.message}
+                  </p>
+                )}
+
+                {wahaServerStatus.online && (
+                  <div className="border border-border rounded-lg overflow-hidden bg-muted/5">
+                    {wahaServerStatus.sessions.length === 0 ? (
+                      <div className="text-center py-6 text-xs text-muted-foreground">
+                        Nenhuma instância configurada neste servidor WAHA ainda.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border text-xs">
+                        {wahaServerStatus.sessions.map((s: any) => {
+                          const isCurrent = s.name === wahaSession;
+                          let displayPhone = s.name;
+                          if (s.me?.id) {
+                            displayPhone = `+${s.me.id.replace('@c.us', '').replace('@lid', '')}`;
+                          }
+                          
+                          return (
+                            <div
+                              key={s.name}
+                              className={`flex items-center justify-between p-2 transition-colors hover:bg-muted/30 ${
+                                isCurrent ? 'bg-muted/40 font-semibold' : ''
+                              }`}
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-foreground flex items-center gap-1.5">
+                                  {s.name}
+                                  {isCurrent && (
+                                    <span className="px-1 py-0.2 rounded bg-primary/10 text-primary text-[8px] uppercase font-bold">
+                                      Selecionada
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {displayPhone} {s.me?.pushName ? `(${s.me.pushName})` : ''}
+                                </span>
+                              </div>
+                              <span
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  s.status === 'WORKING'
+                                    ? 'bg-emerald-950/30 text-emerald-400'
+                                    : s.status === 'SCAN_QR' || s.status === 'SCAN_QR_CODE'
+                                    ? 'bg-amber-950/30 text-amber-400'
+                                    : 'bg-red-950/30 text-red-400'
+                                }`}
+                              >
+                                {s.status}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Connection Status & QR Code (WAHA Specific) */}
           {provider === 'waha' && config && (
             <Card className="border-border bg-card">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
-                  Session Control
+                  Controle de Sessão (Instância Selecionada)
                 </CardTitle>
                 <CardDescription className="text-muted-foreground font-light">
                   Manage your WAHA connection and QR Code scanning.
@@ -816,7 +1025,7 @@ export function WhatsAppConfig() {
                       }`}></span>
                     </span>
                     <div>
-                      <h4 className="text-sm font-semibold text-foreground">WAHA Status</h4>
+                      <h4 className="text-sm font-semibold text-foreground">Status da Instância Selecionada</h4>
                       <p className="text-xs text-muted-foreground">{sessionStatus}</p>
                     </div>
                   </div>
@@ -1121,12 +1330,27 @@ export function WhatsAppConfig() {
 
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">Session Name</Label>
-                    <Input
-                      placeholder="e.g. default"
-                      value={wahaSession}
-                      onChange={(e) => setWahaSession(e.target.value)}
-                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="e.g. default"
+                        value={wahaSession}
+                        onChange={(e) => setWahaSession(e.target.value)}
+                        className="bg-muted border-border text-foreground placeholder:text-muted-foreground flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={checkingSession || !wahaSession.trim()}
+                        onClick={handleVerifySessionName}
+                        className="border-border text-xs text-muted-foreground hover:text-foreground shrink-0 h-10"
+                      >
+                        {checkingSession ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          'Verificar no Servidor'
+                        )}
+                      </Button>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       A unique identifier for your WhatsApp connection session.
                     </p>
