@@ -224,6 +224,41 @@ export async function sendWahaTextMessage(
   };
 }
 
+function getMimeType(filename: string, mediaType: MediaKind): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  
+  if (mediaType === 'image') {
+    if (ext === 'png') return 'image/png';
+    if (ext === 'gif') return 'image/gif';
+    if (ext === 'webp') return 'image/webp';
+    return 'image/jpeg';
+  }
+  
+  if (mediaType === 'audio') {
+    if (ext === 'mp3') return 'audio/mpeg';
+    if (ext === 'aac') return 'audio/aac';
+    if (ext === 'wav') return 'audio/wav';
+    if (ext === 'webm') return 'audio/webm';
+    return 'audio/ogg'; // WhatsApp voice notes are typically Ogg/Opus
+  }
+  
+  if (mediaType === 'video') {
+    if (ext === 'mov') return 'video/quicktime';
+    return 'video/mp4';
+  }
+  
+  // Document / fallback
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'doc' || ext === 'docx') return 'application/msword';
+  if (ext === 'xls' || ext === 'xlsx') return 'application/vnd.ms-excel';
+  if (ext === 'ppt' || ext === 'pptx') return 'application/vnd.ms-powerpoint';
+  if (ext === 'txt') return 'text/plain';
+  if (ext === 'csv') return 'text/csv';
+  if (ext === 'zip') return 'application/zip';
+  
+  return 'application/octet-stream';
+}
+
 export async function sendWahaMediaMessage(
   config: WahaConfig,
   to: string,
@@ -239,6 +274,7 @@ export async function sendWahaMediaMessage(
     file: {
       url: mediaUrl,
       name: filename || `file_${Date.now()}`,
+      mimetype: getMimeType(filename || '', mediaType),
     },
     caption: caption || '',
     session: config.waha_session,

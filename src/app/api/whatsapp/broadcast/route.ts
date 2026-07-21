@@ -121,7 +121,7 @@ export async function POST(request: Request) {
     const wahaConfig = isWaha ? {
       waha_url: config.waha_url,
       waha_session: config.waha_session,
-      waha_api_key: config.waha_api_key,
+      waha_api_key: config.waha_api_key ? decrypt(config.waha_api_key) : null,
     } : null
 
     const accessToken = isWaha ? '' : decrypt(config.access_token)
