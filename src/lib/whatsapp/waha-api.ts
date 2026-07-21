@@ -4,6 +4,10 @@ interface WahaConfig {
   waha_url: string;
   waha_session: string;
   waha_api_key?: string | null;
+  proxy_enabled?: boolean;
+  proxy_server?: string | null;
+  proxy_username?: string | null;
+  proxy_password?: string | null;
 }
 
 async function wahaFetch(
@@ -70,6 +74,13 @@ export async function getWahaSessionInfo(
 }
 
 export async function startWahaSession(config: WahaConfig, webhookUrl?: string): Promise<void> {
+  // Check if the session is already working/running
+  const currentStatus = await getWahaSessionStatus(config);
+  if (currentStatus === 'WORKING') {
+    console.log(`[waha-api] Session "${config.waha_session}" is already WORKING. Skipping creation/restart to avoid disconnection.`);
+    return;
+  }
+
   // If webhookUrl is provided, we stop and delete the session first to recreate it with the webhook config
   if (webhookUrl) {
     try {
@@ -81,15 +92,27 @@ export async function startWahaSession(config: WahaConfig, webhookUrl?: string):
   }
 
   const sessionPayload: Record<string, any> = { name: config.waha_session };
+  const sessionConfig: Record<string, any> = {};
+
   if (webhookUrl) {
-    sessionPayload.config = {
-      webhooks: [
-        {
-          url: webhookUrl,
-          events: ['message', 'message.any', 'message.reaction', 'message.ack', 'message.revoked'],
-        }
-      ]
+    sessionConfig.webhooks = [
+      {
+        url: webhookUrl,
+        events: ['message'], // ONLY message event
+      }
+    ];
+  }
+
+  if (config.proxy_enabled && config.proxy_server) {
+    sessionConfig.proxy = {
+      server: config.proxy_server.trim(),
+      username: config.proxy_username?.trim() || undefined,
+      password: config.proxy_password?.trim() || undefined,
     };
+  }
+
+  if (Object.keys(sessionConfig).length > 0) {
+    sessionPayload.config = sessionConfig;
   }
 
   let createRes = await wahaFetch(config, '/api/sessions', {

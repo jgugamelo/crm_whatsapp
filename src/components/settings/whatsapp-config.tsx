@@ -89,6 +89,13 @@ export function WhatsAppConfig() {
   } | null>(null);
   const [checkingSession, setCheckingSession] = useState(false);
 
+  // Proxy States
+  const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [proxyServer, setProxyServer] = useState('');
+  const [proxyUsername, setProxyUsername] = useState('');
+  const [proxyPassword, setProxyPassword] = useState('');
+  const [proxyPasswordEdited, setProxyPasswordEdited] = useState(false);
+
   // VoIP States
   const [voipBaseUrl, setVoipBaseUrl] = useState<string>('');
   const [voipStatus, setVoipStatus] = useState<string>('NOT_CREATED');
@@ -186,6 +193,12 @@ export function WhatsAppConfig() {
         setWahaApiKey(c.waha_api_key ? MASKED_TOKEN : '');
         setWahaApiKeyEdited(false);
         setSessionStatus(c.session_status || 'STOPPED');
+
+        setProxyEnabled(c.proxy_enabled || false);
+        setProxyServer(c.proxy_server || '');
+        setProxyUsername(c.proxy_username || '');
+        setProxyPassword(c.proxy_password ? MASKED_TOKEN : '');
+        setProxyPasswordEdited(false);
       }
       setConnectionStatus(c.connected ? 'connected' : 'disconnected');
     } else {
@@ -206,6 +219,12 @@ export function WhatsAppConfig() {
       setWahaApiKeyEdited(false);
       setSessionStatus('STOPPED');
       setConnectionStatus('disconnected');
+
+      setProxyEnabled(false);
+      setProxyServer('');
+      setProxyUsername('');
+      setProxyPassword('');
+      setProxyPasswordEdited(false);
     }
   }, []);
 
@@ -294,6 +313,10 @@ export function WhatsAppConfig() {
         waha_url: wahaUrl.trim(),
         waha_session: sessionName.trim(),
         waha_api_key: wahaApiKeyEdited ? wahaApiKey.trim() : (activeConfigId ? MASKED_TOKEN : ''),
+        proxy_enabled: proxyEnabled,
+        proxy_server: proxyServer.trim() || null,
+        proxy_username: proxyUsername.trim() || null,
+        proxy_password: proxyPasswordEdited ? proxyPassword.trim() : (activeConfigId ? MASKED_TOKEN : ''),
       };
       if (activeConfigId) {
         payload.id = activeConfigId;
@@ -596,6 +619,10 @@ export function WhatsAppConfig() {
           waha_url: wahaUrl.trim(),
           waha_session: wahaSession.trim(),
           waha_api_key: wahaApiKeyEdited ? wahaApiKey.trim() : (activeConfigId ? MASKED_TOKEN : ''),
+          proxy_enabled: proxyEnabled,
+          proxy_server: proxyServer.trim() || null,
+          proxy_username: proxyUsername.trim() || null,
+          proxy_password: proxyPasswordEdited ? proxyPassword.trim() : (activeConfigId ? MASKED_TOKEN : ''),
         };
         if (activeConfigId) {
           payload.id = activeConfigId;
@@ -1452,6 +1479,76 @@ export function WhatsAppConfig() {
                       <p className="text-xs text-muted-foreground">
                         API key is masked for security. Re-enter it to update.
                       </p>
+                    )}
+                  </div>
+
+                  {/* Proxy Settings */}
+                  <div className="border-t border-border pt-4 mt-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <Label className="text-foreground font-semibold flex items-center gap-1.5">
+                          Proxy
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          Configure um servidor proxy para esta conexão do WhatsApp.
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={proxyEnabled ? 'default' : 'outline'}
+                        onClick={() => setProxyEnabled(!proxyEnabled)}
+                        className={`text-xs h-8 font-semibold ${
+                          proxyEnabled ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'text-muted-foreground'
+                        }`}
+                      >
+                        {proxyEnabled ? 'Proxy Ativado' : 'Proxy Desativado'}
+                      </Button>
+                    </div>
+
+                    {proxyEnabled && (
+                      <div className="space-y-4 pl-2 border-l border-border animate-in fade-in slide-in-from-top-1 duration-150">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Servidor (Proxy Server)</Label>
+                          <Input
+                            placeholder="host:porta (ex: 12.34.56.78:8080)"
+                            value={proxyServer}
+                            onChange={(e) => setProxyServer(e.target.value)}
+                            className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs"
+                          />
+                        </div>
+
+                        <div className="grid gap-4 grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-muted-foreground">Nome de usuário (opcional)</Label>
+                            <Input
+                              placeholder="Usuário"
+                              value={proxyUsername}
+                              onChange={(e) => setProxyUsername(e.target.value)}
+                              className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-muted-foreground">Senha (opcional)</Label>
+                            <Input
+                              type="password"
+                              placeholder="Senha"
+                              value={proxyPassword}
+                              onChange={(e) => {
+                                setProxyPassword(e.target.value);
+                                setProxyPasswordEdited(true);
+                              }}
+                              onFocus={() => {
+                                if (proxyPassword === MASKED_TOKEN) {
+                                  setProxyPassword('');
+                                  setProxyPasswordEdited(true);
+                                }
+                              }}
+                              className="bg-muted border-border text-foreground placeholder:text-muted-foreground text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </>

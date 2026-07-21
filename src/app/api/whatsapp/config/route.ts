@@ -13,6 +13,8 @@ import {
   startWahaSession,
 } from '@/lib/whatsapp/waha-api'
 
+const MASKED_TOKEN = '••••••••••••••••'
+
 /**
  * Resolve the caller's account_id from their profile. Inlined here
  * (rather than going through `@/lib/auth/account.getCurrentAccount`)
@@ -142,6 +144,10 @@ export async function GET() {
               session_status: status,
               waha_session: config.waha_session,
               waha_url: config.waha_url,
+              proxy_enabled: config.proxy_enabled,
+              proxy_server: config.proxy_server,
+              proxy_username: config.proxy_username,
+              proxy_password: config.proxy_password ? MASKED_TOKEN : '',
               phone_info: {
                 id: config.waha_session,
                 display_phone_number: displayPhone,
@@ -156,6 +162,10 @@ export async function GET() {
               session_status: 'UNKNOWN',
               waha_session: config.waha_session,
               waha_url: config.waha_url,
+              proxy_enabled: config.proxy_enabled,
+              proxy_server: config.proxy_server,
+              proxy_username: config.proxy_username,
+              proxy_password: config.proxy_password ? MASKED_TOKEN : '',
               reason: 'waha_api_error',
               message: `Could not connect to WAHA server at ${config.waha_url}: ${err.message}`,
               phone_info: {
@@ -256,9 +266,22 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { id: configId, provider = 'meta', waha_url, waha_session, waha_api_key, phone_number_id, waba_id, access_token, verify_token, pin } = body
-
-    const MASKED_TOKEN = '••••••••••••••••'
+    const { 
+      id: configId, 
+      provider = 'meta', 
+      waha_url, 
+      waha_session, 
+      waha_api_key, 
+      phone_number_id, 
+      waba_id, 
+      access_token, 
+      verify_token, 
+      pin,
+      proxy_enabled,
+      proxy_server,
+      proxy_username,
+      proxy_password
+    } = body
 
     if (provider === 'waha') {
       if (!waha_url || !waha_session) {
@@ -308,6 +331,20 @@ export async function POST(request: Request) {
         }
       }
 
+      // Encrypt proxy password if provided
+      let encryptedProxyPassword: string | null = null
+      if (proxy_password && proxy_password !== MASKED_TOKEN) {
+        try {
+          encryptedProxyPassword = encrypt(proxy_password)
+        } catch (err) {
+          console.error('Proxy password encryption failed:', err)
+          return NextResponse.json(
+            { error: 'Failed to encrypt proxy password.' },
+            { status: 500 }
+          )
+        }
+      }
+
       // Upsert configuration in DB
       const wahaConfigObj: Record<string, any> = {
         provider: 'waha',
@@ -317,14 +354,17 @@ export async function POST(request: Request) {
         access_token: 'waha-placeholder', // Mock access_token for not null constraints
         status: 'disconnected', // Initially disconnected, user starts it manually
         account_id: accountId,
-        user_id: user.id
+        user_id: user.id,
+        proxy_enabled: !!proxy_enabled,
+        proxy_server: proxy_server ? proxy_server.trim() : null,
+        proxy_username: proxy_username ? proxy_username.trim() : null
       }
 
       let existing = null
       if (configId) {
         const { data } = await supabase
           .from('whatsapp_config')
-          .select('id, waha_api_key')
+          .select('id, waha_api_key, proxy_password')
           .eq('id', configId)
           .eq('account_id', accountId)
           .maybeSingle()
@@ -332,7 +372,7 @@ export async function POST(request: Request) {
       } else {
         const { data } = await supabase
           .from('whatsapp_config')
-          .select('id, waha_api_key')
+          .select('id, waha_api_key, proxy_password')
           .eq('account_id', accountId)
           .eq('waha_session', waha_session)
           .maybeSingle()
@@ -348,6 +388,12 @@ export async function POST(request: Request) {
           wahaConfigObj.waha_api_key = encryptedApiKey
         }
 
+        if (proxy_password === MASKED_TOKEN) {
+          wahaConfigObj.proxy_password = existing.proxy_password
+        } else {
+          wahaConfigObj.proxy_password = encryptedProxyPassword
+        }
+
         const { error: updateError } = await supabase
           .from('whatsapp_config')
           .update(wahaConfigObj)
@@ -359,6 +405,8 @@ export async function POST(request: Request) {
         }
       } else {
         wahaConfigObj.waha_api_key = encryptedApiKey
+        wahaConfigObj.proxy_password = encryptedProxyPassword
+
         const { data: insertedData, error: insertError } = await supabase
           .from('whatsapp_config')
           .insert(wahaConfigObj)
@@ -378,6 +426,10 @@ export async function POST(request: Request) {
           ? (existing.waha_api_key ? decrypt(existing.waha_api_key) : null)
           : waha_api_key
 
+        const rawProxyPassword = proxy_password === MASKED_TOKEN && existing
+          ? (existing.proxy_password ? decrypt(existing.proxy_password) : null)
+          : proxy_password
+
         const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
         const protocol = request.headers.get('x-forwarded-proto') || 'https'
         const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook/waha`
@@ -385,7 +437,11 @@ export async function POST(request: Request) {
         await startWahaSession({
           waha_url,
           waha_session,
-          waha_api_key: rawApiKey && rawApiKey !== MASKED_TOKEN ? rawApiKey : null
+          waha_api_key: rawApiKey && rawApiKey !== MASKED_TOKEN ? rawApiKey : null,
+          proxy_enabled: !!proxy_enabled,
+          proxy_server: proxy_server || null,
+          proxy_username: proxy_username || null,
+          proxy_password: rawProxyPassword && rawProxyPassword !== MASKED_TOKEN ? rawProxyPassword : null
         }, webhookUrl)
       } catch (err) {
         console.warn('Could not auto-start WAHA session:', err)
