@@ -239,7 +239,7 @@ function getMimeType(filename: string, mediaType: MediaKind): string {
     if (ext === 'aac') return 'audio/aac';
     if (ext === 'wav') return 'audio/wav';
     if (ext === 'webm') return 'audio/webm';
-    return 'audio/ogg'; // WhatsApp voice notes are typically Ogg/Opus
+    return 'audio/ogg; codecs=opus'; // WAHA voice notes require opus ogg codec
   }
   
   if (mediaType === 'video') {
@@ -283,9 +283,21 @@ export async function sendWahaMediaMessage(
     console.error('[waha-api] Failed to convert media to Base64, falling back to URL:', err);
   }
 
+  // Ensure safe filename and extension
+  let safeFilename = filename || `file_${Date.now()}`;
+  const ext = safeFilename.split('.').pop()?.toLowerCase();
+  if (mediaType === 'audio' && !['ogg', 'mp3', 'aac', 'wav', 'webm'].includes(ext || '')) {
+    safeFilename = `${safeFilename}.ogg`;
+  } else if (mediaType === 'image' && !['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext || '')) {
+    safeFilename = `${safeFilename}.jpg`;
+  } else if (mediaType === 'video' && !['mp4', '3gp', 'mov'].includes(ext || '')) {
+    safeFilename = `${safeFilename}.mp4`;
+  }
+
   const filePayload: Record<string, any> = {
-    name: filename || `file_${Date.now()}`,
-    mimetype: getMimeType(filename || '', mediaType),
+    name: safeFilename,
+    filename: safeFilename, // Swagger schema uses filename, some engines use name - pass both for compatibility
+    mimetype: getMimeType(safeFilename, mediaType),
   };
 
   if (base64Data) {
