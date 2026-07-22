@@ -382,10 +382,10 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO wacrm.profiles (user_id, full_name, email)
+  INSERT INTO public.profiles (user_id, full_name, email)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
@@ -519,7 +519,7 @@ BEGIN
   ) agg
   WHERE b.id = bid;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = wacrm, public, extensions;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE OR REPLACE FUNCTION public.broadcast_recipient_aggregate_trigger()
 RETURNS TRIGGER AS $$
@@ -535,7 +535,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = wacrm, public, extensions;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS broadcast_recipients_aggregate ON broadcast_recipients;
 CREATE TRIGGER broadcast_recipients_aggregate
@@ -649,7 +649,7 @@ BEGIN
     col, col
   ) USING delta, bid;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = wacrm, public, extensions;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Columns this recipient's status contributes to.
 CREATE OR REPLACE FUNCTION public._bcast_cols_for_status(s TEXT)
@@ -704,7 +704,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = wacrm, public, extensions;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Trigger itself remains the same (INSERT/UPDATE/DELETE) — just its
 -- body has been replaced.
@@ -734,7 +734,7 @@ BEGIN
   ) agg
   WHERE b.id = bid;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = wacrm, public, extensions;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 -- ============================================================
 -- 006_automations.sql — Automations feature
 --
@@ -894,7 +894,7 @@ CREATE OR REPLACE FUNCTION increment_automation_execution_count(p_automation_id 
 RETURNS VOID
 LANGUAGE sql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
   UPDATE automations
   SET
@@ -1423,7 +1423,7 @@ CREATE OR REPLACE FUNCTION increment_flow_execution_count(p_flow_id UUID)
 RETURNS VOID
 LANGUAGE sql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
   UPDATE flows
   SET
@@ -2022,7 +2022,7 @@ CREATE OR REPLACE FUNCTION is_account_member(
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
   SELECT EXISTS (
     SELECT 1
@@ -2108,13 +2108,13 @@ BEGIN
   -- off auth.users instead of profiles, so every authenticated user is
   -- migrated and no domain row can be left without an account.
   -- full_name / email are NOT NULL on profiles, hence the COALESCE.
-  INSERT INTO wacrm.profiles (user_id, full_name, email)
+  INSERT INTO public.profiles (user_id, full_name, email)
   SELECT u.id,
          COALESCE(u.raw_user_meta_data->>'full_name', ''),
          COALESCE(u.email, '')
   FROM auth.users u
   WHERE NOT EXISTS (
-    SELECT 1 FROM wacrm.profiles p WHERE p.user_id = u.id
+    SELECT 1 FROM public.profiles p WHERE p.user_id = u.id
   );
 
   -- (1) Create one account per existing profile whose user does not
@@ -2542,7 +2542,7 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_full_name TEXT;
@@ -2554,7 +2554,7 @@ BEGIN
   VALUES (COALESCE(NULLIF(v_full_name, ''), NEW.email, 'My account'), NEW.id)
   RETURNING id INTO v_account_id;
 
-  INSERT INTO wacrm.profiles (user_id, full_name, email, account_id, account_role)
+  INSERT INTO public.profiles (user_id, full_name, email, account_id, account_role)
   VALUES (NEW.id, v_full_name, NEW.email, v_account_id, 'owner');
 
   RETURN NEW;
@@ -2611,7 +2611,7 @@ CREATE OR REPLACE FUNCTION public.set_member_role(
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_caller_account_id UUID;
@@ -2700,7 +2700,7 @@ CREATE OR REPLACE FUNCTION public.remove_account_member(
 ) RETURNS UUID  -- the new personal account id
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_caller_account_id UUID;
@@ -2790,7 +2790,7 @@ CREATE OR REPLACE FUNCTION public.transfer_account_ownership(
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_caller_account_id UUID;
@@ -2900,7 +2900,7 @@ CREATE OR REPLACE FUNCTION public.peek_invitation(
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_inv account_invitations%ROWTYPE;
@@ -2981,7 +2981,7 @@ CREATE OR REPLACE FUNCTION public.redeem_invitation(
 ) RETURNS UUID  -- the joined account_id
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_caller_id UUID := auth.uid();
@@ -3169,7 +3169,7 @@ CREATE POLICY "Members can upload flow media"
       -- two accounts that happen to be in the same Supabase project
       -- can never accidentally collide.
       EXISTS (
-        SELECT 1 FROM wacrm.profiles p
+        SELECT 1 FROM public.profiles p
         WHERE p.user_id = auth.uid()
           AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
       )
@@ -3186,7 +3186,7 @@ CREATE POLICY "Members can update flow media"
     bucket_id = 'flow-media'
     AND (
       EXISTS (
-        SELECT 1 FROM wacrm.profiles p
+        SELECT 1 FROM public.profiles p
         WHERE p.user_id = auth.uid()
           AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
       )
@@ -3201,7 +3201,7 @@ CREATE POLICY "Members can delete flow media"
     bucket_id = 'flow-media'
     AND (
       EXISTS (
-        SELECT 1 FROM wacrm.profiles p
+        SELECT 1 FROM public.profiles p
         WHERE p.user_id = auth.uid()
           AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
       )
@@ -3284,7 +3284,7 @@ CREATE OR REPLACE FUNCTION public.merge_duplicate_contacts()
 RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_group   RECORD;
@@ -3456,7 +3456,7 @@ CREATE POLICY "Members can upload chat media"
   WITH CHECK (
     bucket_id = 'chat-media'
     AND EXISTS (
-      SELECT 1 FROM wacrm.profiles p
+      SELECT 1 FROM public.profiles p
       WHERE p.user_id = auth.uid()
         AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
     )
@@ -3468,7 +3468,7 @@ CREATE POLICY "Members can update chat media"
   USING (
     bucket_id = 'chat-media'
     AND EXISTS (
-      SELECT 1 FROM wacrm.profiles p
+      SELECT 1 FROM public.profiles p
       WHERE p.user_id = auth.uid()
         AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
     )
@@ -3480,7 +3480,7 @@ CREATE POLICY "Members can delete chat media"
   USING (
     bucket_id = 'chat-media'
     AND EXISTS (
-      SELECT 1 FROM wacrm.profiles p
+      SELECT 1 FROM public.profiles p
       WHERE p.user_id = auth.uid()
         AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
     )
@@ -3545,7 +3545,7 @@ CREATE OR REPLACE FUNCTION public.touch_presence(
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
 DECLARE
   v_account_id UUID;
@@ -3628,7 +3628,7 @@ RETURNS TABLE (contact contacts, total_count BIGINT)
 LANGUAGE sql
 STABLE
 SECURITY INVOKER
-SET search_path = wacrm, public, extensions
+SET search_path = public
 AS $$
   WITH matched AS (
     -- Distinct contacts having ANY of the selected tags (OR),
