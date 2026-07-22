@@ -1,6 +1,12 @@
 CREATE SCHEMA IF NOT EXISTS wacrm;
 SET search_path TO wacrm, public, extensions;
 
+-- Grant schema access permissions to API roles
+GRANT USAGE ON SCHEMA wacrm TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA wacrm TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA wacrm TO anon, authenticated, service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA wacrm TO anon, authenticated, service_role;
+
 -- ============================================================
 -- Idempotent migration — safe to run multiple times.
 -- Uses IF NOT EXISTS for tables/indexes and DROP IF EXISTS
