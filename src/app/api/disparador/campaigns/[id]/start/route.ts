@@ -4,8 +4,8 @@ import { ensureQueueWorkerRunning } from "@/lib/disparador/worker";
 
 // Use admin client to write to the queue bypassing RLS
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://example.supabase.co",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || "dummy-service-role-key",
   { db: { schema: "wacrm" } }
 );
 
