@@ -47,7 +47,7 @@
     "@emnapi/core": "^1.11.2",
     "@emnapi/runtime": "^1.11.2",
     "@emnapi/wasi-threads": "^2.0.1",
-    "@supabase/ssr": "^0.10.3",
+    "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.107.0",
     "@xyflow/react": "^12.11.0",
     "class-variance-authority": "^0.7.1",
