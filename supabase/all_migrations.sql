@@ -385,7 +385,7 @@ SECURITY DEFINER
 SET search_path = wacrm, public, extensions
 AS $$
 BEGIN
-  INSERT INTO public.profiles (user_id, full_name, email)
+  INSERT INTO wacrm.profiles (user_id, full_name, email)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
@@ -2108,13 +2108,13 @@ BEGIN
   -- off auth.users instead of profiles, so every authenticated user is
   -- migrated and no domain row can be left without an account.
   -- full_name / email are NOT NULL on profiles, hence the COALESCE.
-  INSERT INTO public.profiles (user_id, full_name, email)
+  INSERT INTO wacrm.profiles (user_id, full_name, email)
   SELECT u.id,
          COALESCE(u.raw_user_meta_data->>'full_name', ''),
          COALESCE(u.email, '')
   FROM auth.users u
   WHERE NOT EXISTS (
-    SELECT 1 FROM public.profiles p WHERE p.user_id = u.id
+    SELECT 1 FROM wacrm.profiles p WHERE p.user_id = u.id
   );
 
   -- (1) Create one account per existing profile whose user does not
@@ -2554,7 +2554,7 @@ BEGIN
   VALUES (COALESCE(NULLIF(v_full_name, ''), NEW.email, 'My account'), NEW.id)
   RETURNING id INTO v_account_id;
 
-  INSERT INTO public.profiles (user_id, full_name, email, account_id, account_role)
+  INSERT INTO wacrm.profiles (user_id, full_name, email, account_id, account_role)
   VALUES (NEW.id, v_full_name, NEW.email, v_account_id, 'owner');
 
   RETURN NEW;
@@ -3169,7 +3169,7 @@ CREATE POLICY "Members can upload flow media"
       -- two accounts that happen to be in the same Supabase project
       -- can never accidentally collide.
       EXISTS (
-        SELECT 1 FROM public.profiles p
+        SELECT 1 FROM wacrm.profiles p
         WHERE p.user_id = auth.uid()
           AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
       )
@@ -3186,7 +3186,7 @@ CREATE POLICY "Members can update flow media"
     bucket_id = 'flow-media'
     AND (
       EXISTS (
-        SELECT 1 FROM public.profiles p
+        SELECT 1 FROM wacrm.profiles p
         WHERE p.user_id = auth.uid()
           AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
       )
@@ -3201,7 +3201,7 @@ CREATE POLICY "Members can delete flow media"
     bucket_id = 'flow-media'
     AND (
       EXISTS (
-        SELECT 1 FROM public.profiles p
+        SELECT 1 FROM wacrm.profiles p
         WHERE p.user_id = auth.uid()
           AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
       )
@@ -3456,7 +3456,7 @@ CREATE POLICY "Members can upload chat media"
   WITH CHECK (
     bucket_id = 'chat-media'
     AND EXISTS (
-      SELECT 1 FROM public.profiles p
+      SELECT 1 FROM wacrm.profiles p
       WHERE p.user_id = auth.uid()
         AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
     )
@@ -3468,7 +3468,7 @@ CREATE POLICY "Members can update chat media"
   USING (
     bucket_id = 'chat-media'
     AND EXISTS (
-      SELECT 1 FROM public.profiles p
+      SELECT 1 FROM wacrm.profiles p
       WHERE p.user_id = auth.uid()
         AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
     )
@@ -3480,7 +3480,7 @@ CREATE POLICY "Members can delete chat media"
   USING (
     bucket_id = 'chat-media'
     AND EXISTS (
-      SELECT 1 FROM public.profiles p
+      SELECT 1 FROM wacrm.profiles p
       WHERE p.user_id = auth.uid()
         AND ('account-' || p.account_id::text) = (storage.foldername(name))[1]
     )
