@@ -413,6 +413,9 @@ export async function POST(request: Request) {
       }
 
       let contentText = textBody || ''
+      if (contentType === 'document' && !contentText && mediaInfo?.filename) {
+        contentText = mediaInfo.filename
+      }
       if (contentType === 'poll' && !contentText) {
         const pollMsg = payload._data?.Message?.pollCreationMessage || 
                         payload._data?.Message?.pollCreationMessageV2 || 
