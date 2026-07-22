@@ -384,7 +384,7 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON broadcasts FOR EACH ROW EXECUTE F
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
-CREATE OR REPLACE FUNCTION public.handle_new_user()
+CREATE OR REPLACE FUNCTION wacrm.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -404,7 +404,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
-ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
+ALTER FUNCTION wacrm.handle_new_user() OWNER TO postgres;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
@@ -503,7 +503,7 @@ CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_broadcast_status
 -- ============================================================
 -- Aggregate trigger
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.recompute_broadcast_counts(bid UUID)
+CREATE OR REPLACE FUNCTION wacrm.recompute_broadcast_counts(bid UUID)
 RETURNS VOID AS $$
 BEGIN
   UPDATE broadcasts b SET
@@ -527,7 +527,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-CREATE OR REPLACE FUNCTION public.broadcast_recipient_aggregate_trigger()
+CREATE OR REPLACE FUNCTION wacrm.broadcast_recipient_aggregate_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -647,7 +647,7 @@ ALTER TABLE deals
 -- ============================================================
 
 -- Delta a single column by +1 / -1.
-CREATE OR REPLACE FUNCTION public._bcast_bump(bid UUID, col TEXT, delta INT)
+CREATE OR REPLACE FUNCTION wacrm._bcast_bump(bid UUID, col TEXT, delta INT)
 RETURNS VOID AS $$
 BEGIN
   EXECUTE format(
@@ -658,7 +658,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Columns this recipient's status contributes to.
-CREATE OR REPLACE FUNCTION public._bcast_cols_for_status(s TEXT)
+CREATE OR REPLACE FUNCTION wacrm._bcast_cols_for_status(s TEXT)
 RETURNS TEXT[] AS $$
 BEGIN
   -- 'pending' contributes to nothing.
@@ -673,7 +673,7 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Replace the trigger body with the incremental version.
-CREATE OR REPLACE FUNCTION public.broadcast_recipient_aggregate_trigger()
+CREATE OR REPLACE FUNCTION wacrm.broadcast_recipient_aggregate_trigger()
 RETURNS TRIGGER AS $$
 DECLARE
   old_cols TEXT[];
@@ -718,7 +718,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 -- Safety net — rebuild counts from scratch. Retained as-is so ops can
 -- run it on demand if something ever drifts. Matches the incremental
 -- trigger's semantic model exactly.
-CREATE OR REPLACE FUNCTION public.recompute_broadcast_counts(bid UUID)
+CREATE OR REPLACE FUNCTION wacrm.recompute_broadcast_counts(bid UUID)
 RETURNS VOID AS $$
 BEGIN
   UPDATE broadcasts b SET
@@ -2544,7 +2544,7 @@ CREATE POLICY account_invitations_modify ON account_invitations FOR ALL
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
-CREATE OR REPLACE FUNCTION public.handle_new_user()
+CREATE OR REPLACE FUNCTION wacrm.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -2570,7 +2570,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
-ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
+ALTER FUNCTION wacrm.handle_new_user() OWNER TO postgres;
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
@@ -2611,7 +2611,7 @@ CREATE TRIGGER on_auth_user_created
 -- account. Cannot promote to / demote from 'owner' (that is the
 -- transfer endpoint). Cannot target self.
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.set_member_role(
+CREATE OR REPLACE FUNCTION wacrm.set_member_role(
   p_user_id UUID,
   p_new_role account_role_enum
 ) RETURNS VOID
@@ -2684,9 +2684,9 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.set_member_role(UUID, account_role_enum) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.set_member_role(UUID, account_role_enum) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.set_member_role(UUID, account_role_enum) TO authenticated;
+ALTER FUNCTION wacrm.set_member_role(UUID, account_role_enum) OWNER TO postgres;
+REVOKE ALL ON FUNCTION wacrm.set_member_role(UUID, account_role_enum) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION wacrm.set_member_role(UUID, account_role_enum) TO authenticated;
 
 -- ============================================================
 -- remove_account_member(p_user_id)
@@ -2701,7 +2701,7 @@ GRANT EXECUTE ON FUNCTION public.set_member_role(UUID, account_role_enum) TO aut
 --
 -- Cannot target the owner. Cannot target self.
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.remove_account_member(
+CREATE OR REPLACE FUNCTION wacrm.remove_account_member(
   p_user_id UUID
 ) RETURNS UUID  -- the new personal account id
 LANGUAGE plpgsql
@@ -2777,9 +2777,9 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.remove_account_member(UUID) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.remove_account_member(UUID) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.remove_account_member(UUID) TO authenticated;
+ALTER FUNCTION wacrm.remove_account_member(UUID) OWNER TO postgres;
+REVOKE ALL ON FUNCTION wacrm.remove_account_member(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION wacrm.remove_account_member(UUID) TO authenticated;
 
 -- ============================================================
 -- transfer_account_ownership(p_new_owner_user_id)
@@ -2791,7 +2791,7 @@ GRANT EXECUTE ON FUNCTION public.remove_account_member(UUID) TO authenticated;
 --
 -- Both writes happen in the same statement-level transaction.
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.transfer_account_ownership(
+CREATE OR REPLACE FUNCTION wacrm.transfer_account_ownership(
   p_new_owner_user_id UUID
 ) RETURNS VOID
 LANGUAGE plpgsql
@@ -2855,9 +2855,9 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.transfer_account_ownership(UUID) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.transfer_account_ownership(UUID) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.transfer_account_ownership(UUID) TO authenticated;
+ALTER FUNCTION wacrm.transfer_account_ownership(UUID) OWNER TO postgres;
+REVOKE ALL ON FUNCTION wacrm.transfer_account_ownership(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION wacrm.transfer_account_ownership(UUID) TO authenticated;
 -- ============================================================
 -- 019_invitation_rpcs.sql — peek + redeem invitation RPCs
 --
@@ -2900,7 +2900,7 @@ GRANT EXECUTE ON FUNCTION public.transfer_account_ownership(UUID) TO authenticat
 -- enumeration risk is theoretical; rate-limiting the route on
 -- the IP layer adds belt-and-braces.
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.peek_invitation(
+CREATE OR REPLACE FUNCTION wacrm.peek_invitation(
   p_token_hash TEXT
 ) RETURNS JSON
 LANGUAGE plpgsql
@@ -2941,12 +2941,12 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.peek_invitation(TEXT) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.peek_invitation(TEXT) FROM PUBLIC;
+ALTER FUNCTION wacrm.peek_invitation(TEXT) OWNER TO postgres;
+REVOKE ALL ON FUNCTION wacrm.peek_invitation(TEXT) FROM PUBLIC;
 -- `anon` so the /join/<token> page can call this before the user
 -- signs in; `authenticated` so the same page works when already
 -- signed in (e.g. existing user clicks a forwarded link).
-GRANT EXECUTE ON FUNCTION public.peek_invitation(TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION wacrm.peek_invitation(TEXT) TO anon, authenticated;
 
 -- ============================================================
 -- redeem_invitation(p_token_hash text)
@@ -2982,7 +2982,7 @@ GRANT EXECUTE ON FUNCTION public.peek_invitation(TEXT) TO anon, authenticated;
 --      delete the caller's profile too, but step 4 already moved
 --      them to the new account, so the cascade is a no-op.
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.redeem_invitation(
+CREATE OR REPLACE FUNCTION wacrm.redeem_invitation(
   p_token_hash TEXT
 ) RETURNS UUID  -- the joined account_id
 LANGUAGE plpgsql
@@ -3092,9 +3092,9 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.redeem_invitation(TEXT) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.redeem_invitation(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.redeem_invitation(TEXT) TO authenticated;
+ALTER FUNCTION wacrm.redeem_invitation(TEXT) OWNER TO postgres;
+REVOKE ALL ON FUNCTION wacrm.redeem_invitation(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION wacrm.redeem_invitation(TEXT) TO authenticated;
 -- ============================================================
 -- 020_account_sharing_followups.sql — review-board fixes for
 -- the multi-user accounts series (#167-#177).
@@ -3286,7 +3286,7 @@ ALTER TABLE contacts
 --    SECURITY DEFINER so it can re-point rows across tables
 --    regardless of the caller's RLS; it only ever collapses exact
 --    normalized duplicates within the same account.
-CREATE OR REPLACE FUNCTION public.merge_duplicate_contacts()
+CREATE OR REPLACE FUNCTION wacrm.merge_duplicate_contacts()
 RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -3358,8 +3358,8 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.merge_duplicate_contacts() OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.merge_duplicate_contacts() FROM PUBLIC;
+ALTER FUNCTION wacrm.merge_duplicate_contacts() OWNER TO postgres;
+REVOKE ALL ON FUNCTION wacrm.merge_duplicate_contacts() FROM PUBLIC;
 
 -- Collapse whatever duplicates exist right now.
 SELECT public.merge_duplicate_contacts();
@@ -3546,7 +3546,7 @@ CREATE POLICY member_presence_select ON member_presence FOR SELECT
 -- write despite the absence of a client write policy; the account
 -- is resolved from the caller's own profile, so a client can never
 -- spoof which account it appears in.
-CREATE OR REPLACE FUNCTION public.touch_presence(
+CREATE OR REPLACE FUNCTION wacrm.touch_presence(
   p_status TEXT DEFAULT 'online'
 ) RETURNS VOID
 LANGUAGE plpgsql
@@ -3624,7 +3624,7 @@ END $$;
 -- Idempotent — safe to run multiple times.
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION public.filter_contacts_by_tags(
+CREATE OR REPLACE FUNCTION wacrm.filter_contacts_by_tags(
   p_tag_ids UUID[],
   p_search TEXT DEFAULT NULL,
   p_limit INT DEFAULT 25,
@@ -3664,9 +3664,9 @@ AS $$
   ORDER BY c.created_at DESC, c.id;
 $$;
 
-ALTER FUNCTION public.filter_contacts_by_tags(UUID[], TEXT, INT, INT) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.filter_contacts_by_tags(UUID[], TEXT, INT, INT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.filter_contacts_by_tags(UUID[], TEXT, INT, INT) TO authenticated;
+ALTER FUNCTION wacrm.filter_contacts_by_tags(UUID[], TEXT, INT, INT) OWNER TO postgres;
+REVOKE ALL ON FUNCTION wacrm.filter_contacts_by_tags(UUID[], TEXT, INT, INT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION wacrm.filter_contacts_by_tags(UUID[], TEXT, INT, INT) TO authenticated;
 -- ============================================================
 -- 026_api_keys.sql — Public API credentials (groundwork)
 --
