@@ -176,16 +176,22 @@ export default function InboxPage() {
     checkConnection();
   }, []);
 
+  const activeConversationRef = useRef(activeConversation);
+  useEffect(() => {
+    activeConversationRef.current = activeConversation;
+  }, [activeConversation]);
+
   // Handle realtime message events
   const handleMessageEvent = useCallback(
     (event: { eventType: string; new: Message; old: Partial<Message> }) => {
       const newMsg = event.new;
+      const currentActive = activeConversationRef.current;
 
       if (event.eventType === "INSERT") {
         // Add to messages if it belongs to active conversation
         if (
-          activeConversation &&
-          newMsg.conversation_id === activeConversation.id
+          currentActive &&
+          newMsg.conversation_id === currentActive.id
         ) {
           setMessages((prev) => {
             // Avoid duplicates
@@ -212,7 +218,7 @@ export default function InboxPage() {
                     last_message_text: newMsg.content_text ?? "",
                     last_message_at: newMsg.created_at,
                     unread_count:
-                      activeConversation?.id === newMsg.conversation_id
+                      currentActive?.id === newMsg.conversation_id
                         ? 0
                         : c.unread_count + 1,
                   }
@@ -353,22 +359,24 @@ export default function InboxPage() {
   }, [isConnected]);
 
   /**
-   * Refetch when the tab regains focus. Background tabs may have their
+   * Refetch when the tab regains focus or becomes visible. Background tabs may have their
    * WS throttled by the browser even without a full disconnect, so a
    * visibilitychange → visible is a reliable signal that we may have
    * missed events. Cheap to fire; the children dedupe on their own.
    */
-  // useEffect(() => {
-  //   const onVisibility = () => {
-  //     if (document.visibilityState === "visible") {
-  //       setResyncToken((n) => n + 1);
-  //     }
-  //   };
-  //   document.addEventListener("visibilitychange", onVisibility);
-  //   return () => {
-  //     document.removeEventListener("visibilitychange", onVisibility);
-  //   };
-  // }, []);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setResyncToken((n) => n + 1);
+      }
+    };
+    window.addEventListener("focus", onVisibility);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onVisibility);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   /**
    * Manual refresh trigger for the thread-header refresh button.

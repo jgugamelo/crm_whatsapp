@@ -419,7 +419,7 @@ export function MessageThread({
         "postgres_changes",
         {
           event: "INSERT",
-          schema: "public",
+          schema: "wacrm",
           table: "message_reactions",
           filter: `conversation_id=eq.${conversationId}`,
         },
@@ -449,7 +449,7 @@ export function MessageThread({
         "postgres_changes",
         {
           event: "UPDATE",
-          schema: "public",
+          schema: "wacrm",
           table: "message_reactions",
           filter: `conversation_id=eq.${conversationId}`,
         },
@@ -462,7 +462,7 @@ export function MessageThread({
         "postgres_changes",
         {
           event: "DELETE",
-          schema: "public",
+          schema: "wacrm",
           table: "message_reactions",
           filter: `conversation_id=eq.${conversationId}`,
         },
