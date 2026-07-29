@@ -16,9 +16,15 @@ import {
   Plus,
   Brain,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { Contact, Deal, ContactNote, Tag, Conversation } from "@/types";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -41,6 +47,10 @@ export function ContactSidebar({
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
+  const [allAvailableTags, setAllAvailableTags] = useState<Tag[]>([]);
+  const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#3b82f6");
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -101,8 +111,8 @@ export function ContactSidebar({
 
     const supabase = createClient();
 
-    // Fetch deals, notes, and tags in parallel
-    const [dealsRes, notesRes, tagsRes] = await Promise.all([
+    // Fetch deals, notes, tags, and all account tags in parallel
+    const [dealsRes, notesRes, tagsRes, allTagsRes] = await Promise.all([
       supabase
         .from("deals")
         .select("*, stage:pipeline_stages(*)")
@@ -117,10 +127,15 @@ export function ContactSidebar({
         .from("contact_tags")
         .select("id, tag_id, tags(*)")
         .eq("contact_id", contact.id),
+      supabase
+        .from("tags")
+        .select("*")
+        .order("name"),
     ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
+    if (allTagsRes.data) setAllAvailableTags(allTagsRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
         .filter((ct: Record<string, unknown>) => ct.tags)
@@ -131,6 +146,66 @@ export function ContactSidebar({
       setTags(mapped);
     }
   }, [contact]);
+
+  const handleAddExistingTag = async (tagId: string) => {
+    if (!contact) return;
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("contact_tags")
+        .insert({ contact_id: contact.id, tag_id: tagId });
+
+      if (error) throw error;
+
+      fetchContactData();
+      toast.success("Etiqueta adicionada!");
+    } catch (err: any) {
+      console.error("Error adding tag:", err);
+      toast.error("Erro ao adicionar etiqueta ao contato");
+    }
+  };
+
+  const handleRemoveTag = async (contactTagId: string) => {
+    if (!contact) return;
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("contact_tags")
+        .delete()
+        .eq("id", contactTagId);
+
+      if (error) throw error;
+
+      setTags((prev) => prev.filter((t) => t.contact_tag_id !== contactTagId));
+      toast.success("Etiqueta removida");
+    } catch (err: any) {
+      console.error("Error removing tag:", err);
+      toast.error("Erro ao remover etiqueta");
+    }
+  };
+
+  const handleCreateAndAddTag = async () => {
+    if (!contact || !newTagName.trim()) return;
+    try {
+      const supabase = createClient();
+      const { data: createdTag, error: createError } = await supabase
+        .from("tags")
+        .insert({
+          name: newTagName.trim(),
+          color: newTagColor,
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+
+      await handleAddExistingTag(createdTag.id);
+      setNewTagName("");
+    } catch (err: any) {
+      console.error("Error creating tag:", err);
+      toast.error("Erro ao criar etiqueta");
+    }
+  };
 
   // Load on contact change. setContactData/setTags run inside async
   // Supabase callbacks, not synchronously in the effect body.
@@ -372,10 +447,96 @@ export function ContactSidebar({
 
           {/* Tags */}
           <div>
-            <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <TagIcon className="h-3 w-3" />
-              Etiquetas
+            <div className="flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <TagIcon className="h-3.5 w-3.5" />
+                Etiquetas
+              </div>
+
+              {/* Add Tag Popover */}
+              <Popover open={tagPopoverOpen} onOpenChange={setTagPopoverOpen}>
+                <PopoverTrigger
+                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  title="Gerenciar etiquetas"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-3 border-border bg-popover space-y-3 shadow-md">
+                  <div className="space-y-0.5">
+                    <h4 className="text-xs font-semibold text-foreground">Etiquetas do Contato</h4>
+                    <p className="text-[10px] text-muted-foreground">Clique para adicionar ou remover</p>
+                  </div>
+
+                  {/* Available Tags list */}
+                  <div className="max-h-36 overflow-y-auto space-y-1 border border-border/50 rounded-md p-1 bg-muted/20">
+                    {allAvailableTags.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground py-2 text-center">Nenhuma tag criada ainda</p>
+                    ) : (
+                      allAvailableTags.map((t) => {
+                        const isAttached = tags.some((attached) => attached.id === t.id);
+                        const attachedObj = tags.find((attached) => attached.id === t.id);
+
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              if (isAttached && attachedObj) {
+                                handleRemoveTag(attachedObj.contact_tag_id);
+                              } else {
+                                handleAddExistingTag(t.id);
+                              }
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between px-2 py-1 text-xs rounded transition-colors text-left",
+                              isAttached ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-foreground"
+                            )}
+                          >
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: t.color || "#3b82f6" }} />
+                              <span className="truncate">{t.name}</span>
+                            </div>
+                            {isAttached && <Check className="h-3 w-3 shrink-0 text-primary" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Create New Tag */}
+                  <div className="border-t border-border/60 pt-2 space-y-2">
+                    <span className="text-[11px] font-medium text-foreground block">Criar Nova Tag</span>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Nome da tag..."
+                        value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                        className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none"
+                      />
+                      <input
+                        type="color"
+                        value={newTagColor}
+                        onChange={(e) => setNewTagColor(e.target.value)}
+                        className="h-7 w-7 rounded border border-input p-0.5 cursor-pointer bg-background"
+                        title="Cor da Tag"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full h-7 text-xs"
+                      onClick={handleCreateAndAddTag}
+                      disabled={!newTagName.trim()}
+                    >
+                      Criar e Adicionar
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
+
+            {/* Display Attached Tags */}
             <div className="mt-2 flex flex-wrap gap-1">
               {tags.length === 0 ? (
                 <p className="px-1 text-xs text-muted-foreground">Sem etiquetas</p>
@@ -383,13 +544,22 @@ export function ContactSidebar({
                 tags.map((tag) => (
                   <span
                     key={tag.contact_tag_id}
-                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border"
                     style={{
-                      backgroundColor: `${tag.color}20`,
-                      color: tag.color,
+                      backgroundColor: `${tag.color || "#3b82f6"}20`,
+                      borderColor: `${tag.color || "#3b82f6"}40`,
+                      color: tag.color || "currentColor",
                     }}
                   >
                     {tag.name}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag.contact_tag_id)}
+                      className="ml-0.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5 transition-colors"
+                      title="Remover etiqueta"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
                   </span>
                 ))
               )}
