@@ -357,11 +357,13 @@ export function MessageBubble({
         </div>
       </div>
       {reactions && reactions.length > 0 && onToggleReaction && (
-        <MessageReactions
-          reactions={reactions}
-          currentUserId={currentUserId}
-          onToggle={onToggleReaction}
-        />
+        <div className={cn("mt-0.5 flex", isAgent ? "justify-end" : "justify-start")}>
+          <MessageReactions
+            reactions={reactions}
+            currentUserId={currentUserId}
+            onToggle={onToggleReaction}
+          />
+        </div>
       )}
     </div>
   );

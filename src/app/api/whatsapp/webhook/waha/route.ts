@@ -57,53 +57,79 @@ export async function POST(request: Request) {
     // ============================================================
     // 1.5. Reaction Synchronization
     // ============================================================
-    if (event === 'message.reaction') {
-      console.log('[waha/webhook] Reaction payload:', JSON.stringify(payload))
-      const { reaction, messageKey, fromMe } = payload
-      const originalMessageId = messageKey?.id
-      const emoji = reaction?.text
+    const isReaction =
+      event === 'message.reaction' ||
+      payload.type === 'reaction' ||
+      payload._data?.type === 'reaction' ||
+      Boolean(payload.reaction);
+
+    if (isReaction) {
+      console.log('[waha/webhook] Reaction payload:', JSON.stringify(payload));
+      const reactionObj = payload.reaction || payload._data?.reactionMessage;
+      const originalMessageId =
+        reactionObj?.messageId ||
+        reactionObj?.key?.id ||
+        payload.messageKey?.id ||
+        payload.replyTo?.id;
+
+      const emoji = reactionObj?.text || reactionObj?.emoji || payload.body || '';
+      const fromMe = Boolean(payload.fromMe || reactionObj?.fromMe);
 
       if (!originalMessageId) {
-        return NextResponse.json({ success: true, message: 'Ignored reaction without message key' })
+        return NextResponse.json({ success: true, message: 'Ignored reaction without message key' });
       }
 
-      const { data: dbMsg } = await db
+      // Extract short ID (e.g. "3EB0..." from "false_5521999473307@c.us_3EB0...")
+      const parts = String(originalMessageId).split('_');
+      const shortId = parts[parts.length - 1];
+
+      let { data: dbMsg } = await db
         .from('messages')
         .select('id, conversation_id')
         .eq('message_id', originalMessageId)
-        .maybeSingle()
+        .maybeSingle();
 
-      if (!dbMsg) {
-        console.warn('[waha/webhook] Could not find message in database for reaction:', originalMessageId)
-        return NextResponse.json({ success: true, message: 'Message not found for reaction' })
+      if (!dbMsg && shortId) {
+        const { data: dbMsgShort } = await db
+          .from('messages')
+          .select('id, conversation_id')
+          .ilike('message_id', `%${shortId}%`)
+          .maybeSingle();
+
+        dbMsg = dbMsgShort;
       }
 
-      const actorType = fromMe ? 'agent' : 'customer'
-      
+      if (!dbMsg) {
+        console.warn('[waha/webhook] Could not find message in database for reaction:', originalMessageId);
+        return NextResponse.json({ success: true, message: 'Message not found for reaction' });
+      }
+
+      const actorType = fromMe ? 'agent' : 'customer';
+
       // Delete any existing reaction from this actor on this message
       await db
         .from('message_reactions')
         .delete()
         .eq('message_id', dbMsg.id)
-        .eq('actor_type', actorType)
+        .eq('actor_type', actorType);
 
       // Insert the new reaction if an emoji is provided
-      if (emoji) {
+      if (emoji && emoji.trim()) {
         const { error: insertError } = await db
           .from('message_reactions')
           .insert({
             message_id: dbMsg.id,
             conversation_id: dbMsg.conversation_id,
             actor_type: actorType,
-            emoji: emoji,
-          })
+            emoji: emoji.trim(),
+          });
 
         if (insertError) {
-          console.error('[waha/webhook] Failed to insert reaction:', insertError)
+          console.error('[waha/webhook] Failed to insert reaction:', insertError);
         }
       }
 
-      return NextResponse.json({ success: true, message: 'Reaction synchronized' })
+      return NextResponse.json({ success: true, message: 'Reaction synchronized' });
     }
 
     // ============================================================

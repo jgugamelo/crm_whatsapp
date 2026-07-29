@@ -108,7 +108,8 @@ export async function POST(request: Request) {
               await sendWahaReaction(
                 wahaConfig,
                 targetMessage.message_id,
-                emoji
+                emoji,
+                contact?.phone
               );
             } catch (err) {
               console.warn('[whatsapp/react] WAHA reaction warning:', err);

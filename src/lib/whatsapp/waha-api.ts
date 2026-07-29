@@ -433,13 +433,19 @@ export async function requestWahaPairingCode(
 export async function sendWahaReaction(
   config: WahaConfig,
   messageId: string,
-  emoji: string
+  emoji: string,
+  chatId?: string
 ): Promise<void> {
-  const payload = {
+  const payload: Record<string, any> = {
     session: config.waha_session,
     messageId: messageId,
     reaction: emoji,
   };
+
+  if (chatId) {
+    const raw = chatId.replace(/\D/g, '');
+    payload.chatId = raw.endsWith('@c.us') ? raw : `${raw}@c.us`;
+  }
 
   let res = await wahaFetch(config, '/api/sendReaction', {
     method: 'POST',
@@ -465,7 +471,7 @@ export async function sendWahaReaction(
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Failed to send reaction to WAHA: ${res.status} - ${errorText}`);
+    console.warn(`[waha-api] Failed to send reaction to WAHA: ${res.status} - ${errorText}`);
   }
 }
 
