@@ -3,6 +3,9 @@ import {
   sendWahaTextMessage,
   sendWahaMediaMessage,
   sendWahaVoiceMessage,
+  sendWahaSeen,
+  sendWahaStartTyping,
+  sendWahaStopTyping,
   startWacallsCall,
   playWacallsAudio,
   getWacallsCallStatus
@@ -166,6 +169,15 @@ export function ensureQueueWorkerRunning() {
           const cleanText = messageText.replace(/{nome}/g, item.contacts?.name || "Cliente");
           const normalizedPhone = phone.replace("+", "");
 
+          // Human simulation presence (anti-ban)
+          if (tipo !== "ligacao") {
+            await sendWahaSeen(wahaConfig, normalizedPhone);
+            await sendWahaStartTyping(wahaConfig, normalizedPhone);
+            // Simulate 1.5 - 3 seconds typing delay
+            const typingDelay = 1500 + Math.floor(Math.random() * 1500);
+            await new Promise((resolve) => setTimeout(resolve, typingDelay));
+          }
+
           // Trigger sending via WAHA or WaCalls
           let wahaMessageId = "";
           if (tipo === "imagem") {
@@ -219,6 +231,10 @@ export function ensureQueueWorkerRunning() {
           } else {
             const res = await sendWahaTextMessage(wahaConfig, normalizedPhone, cleanText);
             wahaMessageId = res.messageId;
+          }
+
+          if (tipo !== "ligacao") {
+            await sendWahaStopTyping(wahaConfig, normalizedPhone);
           }
 
           // Update queue item status to success

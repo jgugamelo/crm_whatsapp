@@ -453,6 +453,63 @@ export async function sendWahaReaction(
   }
 }
 
+export async function sendWahaSeen(
+  config: WahaConfig,
+  to: string
+): Promise<void> {
+  const chatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
+  try {
+    await wahaFetch(config, '/api/sendSeen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session: config.waha_session,
+        chatId,
+      }),
+    });
+  } catch (err) {
+    console.warn('[waha-api] sendSeen warning:', err);
+  }
+}
+
+export async function sendWahaStartTyping(
+  config: WahaConfig,
+  to: string
+): Promise<void> {
+  const chatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
+  try {
+    await wahaFetch(config, '/api/startTyping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session: config.waha_session,
+        chatId,
+      }),
+    });
+  } catch (err) {
+    console.warn('[waha-api] startTyping warning:', err);
+  }
+}
+
+export async function sendWahaStopTyping(
+  config: WahaConfig,
+  to: string
+): Promise<void> {
+  const chatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
+  try {
+    await wahaFetch(config, '/api/stopTyping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session: config.waha_session,
+        chatId,
+      }),
+    });
+  } catch (err) {
+    console.warn('[waha-api] stopTyping warning:', err);
+  }
+}
+
 export async function startWacallsCall(
   config: WahaConfig,
   phone: string
