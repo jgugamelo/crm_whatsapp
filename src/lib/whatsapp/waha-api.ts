@@ -435,17 +435,33 @@ export async function sendWahaReaction(
   messageId: string,
   emoji: string
 ): Promise<void> {
-  const res = await wahaFetch(config, '/api/reaction', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      session: config.waha_session,
-      messageId: messageId,
-      reaction: emoji,
-    }),
+  const payload = {
+    session: config.waha_session,
+    messageId: messageId,
+    reaction: emoji,
+  };
+
+  let res = await wahaFetch(config, '/api/sendReaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
+
+  if (!res.ok) {
+    res = await wahaFetch(config, '/api/reaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  if (!res.ok) {
+    res = await wahaFetch(config, '/api/reaction', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
 
   if (!res.ok) {
     const errorText = await res.text();

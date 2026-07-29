@@ -76,94 +76,59 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Message not found' }, { status: 404 });
     }
 
-    if (!targetMessage.message_id) {
-      // No Meta ID yet — usually a sending/failed agent message. We can't
-      // tell Meta to react to a message it never received.
-      return NextResponse.json(
-        { error: 'Cannot react to a message that has not been sent to WhatsApp' },
-        { status: 400 },
-      );
-    }
+    // Attempt sending to WhatsApp provider if message_id exists
+    if (targetMessage.message_id) {
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('id, account_id, contact:contacts(phone)')
+        .eq('id', targetMessage.conversation_id)
+        .eq('account_id', accountId)
+        .maybeSingle();
 
-    const { data: conversation, error: convError } = await supabase
-      .from('conversations')
-      .select('id, account_id, contact:contacts(phone)')
-      .eq('id', targetMessage.conversation_id)
-      .eq('account_id', accountId)
-      .maybeSingle();
+      if (conversation) {
+        const contact = Array.isArray(conversation.contact)
+          ? conversation.contact[0]
+          : conversation.contact;
 
-    if (convError || !conversation) {
-      return NextResponse.json(
-        { error: 'Conversation not found' },
-        { status: 404 },
-      );
-    }
+        const { data: config } = await supabase
+          .from('whatsapp_config')
+          .select('phone_number_id, access_token, provider, waha_url, waha_session, waha_api_key')
+          .eq('account_id', accountId)
+          .maybeSingle();
 
-    const contact = Array.isArray(conversation.contact)
-      ? conversation.contact[0]
-      : conversation.contact;
-    if (!contact?.phone) {
-      return NextResponse.json(
-        { error: 'Contact phone number not found' },
-        { status: 400 },
-      );
-    }
+        if (config) {
+          if (config.provider === 'waha') {
+            const wahaConfig = {
+              waha_url: config.waha_url,
+              waha_session: config.waha_session,
+              waha_api_key: config.waha_api_key ? decrypt(config.waha_api_key) : null,
+            };
 
-    // WhatsApp config + access token. Account-scoped post-multi-user.
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('phone_number_id, access_token, provider, waha_url, waha_session, waha_api_key')
-      .eq('account_id', accountId)
-      .single();
-
-    if (configError || !config) {
-      return NextResponse.json(
-        { error: 'WhatsApp not configured.' },
-        { status: 400 },
-      );
-    }
-
-    if (config.provider === 'waha') {
-      const wahaConfig = {
-        waha_url: config.waha_url,
-        waha_session: config.waha_session,
-        waha_api_key: config.waha_api_key ? decrypt(config.waha_api_key) : null,
-      };
-
-      try {
-        await sendWahaReaction(
-          wahaConfig,
-          targetMessage.message_id,
-          emoji
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown WAHA API error';
-        console.error('[whatsapp/react] WAHA reaction failed:', message);
-        return NextResponse.json(
-          { error: `WAHA API error: ${message}` },
-          { status: 502 },
-        );
-      }
-    } else {
-      const accessToken = decrypt(config.access_token);
-      const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
-
-      try {
-        await sendReactionMessage({
-          phoneNumberId: config.phone_number_id,
-          accessToken,
-          to: sanitizedPhone,
-          targetMessageId: targetMessage.message_id,
-          emoji,
-        });
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'Unknown Meta API error';
-        console.error('[whatsapp/react] Meta send failed:', message);
-        return NextResponse.json(
-          { error: `Meta API error: ${message}` },
-          { status: 502 },
-        );
+            try {
+              await sendWahaReaction(
+                wahaConfig,
+                targetMessage.message_id,
+                emoji
+              );
+            } catch (err) {
+              console.warn('[whatsapp/react] WAHA reaction warning:', err);
+            }
+          } else if (config.phone_number_id && config.access_token && contact?.phone) {
+            try {
+              const accessToken = decrypt(config.access_token);
+              const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
+              await sendReactionMessage({
+                phoneNumberId: config.phone_number_id,
+                accessToken,
+                to: sanitizedPhone,
+                targetMessageId: targetMessage.message_id,
+                emoji,
+              });
+            } catch (err) {
+              console.warn('[whatsapp/react] Meta send reaction warning:', err);
+            }
+          }
+        }
       }
     }
 

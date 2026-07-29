@@ -341,6 +341,8 @@ export function MessageThread({
   // separate from the unread-reset effect so that incoming messages
   // arriving while the thread is open don't trigger a full refetch —
   // they only flip hasUnread, which only the reset effect listens to.
+  const prevConvIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!conversationId) return;
 
@@ -348,7 +350,11 @@ export function MessageThread({
     let cancelled = false;
 
     (async () => {
-      setLoading(true);
+      const isNewConversation = prevConvIdRef.current !== conversationId;
+      if (isNewConversation) {
+        setLoading(true);
+        prevConvIdRef.current = conversationId;
+      }
 
       const { data, error } = await supabase
         .from("messages")
@@ -364,7 +370,7 @@ export function MessageThread({
         onMessagesLoadedRef.current(data ?? []);
       }
 
-      if (!cancelled) setLoading(false);
+      if (!cancelled && isNewConversation) setLoading(false);
     })();
 
     return () => {
