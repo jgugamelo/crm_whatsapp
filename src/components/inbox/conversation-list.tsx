@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus } from "@/types";
-import { Search, ChevronDown } from "lucide-react";
+import { Search, ChevronDown, Pin, PinOff, Tag as TagIcon, Kanban } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,12 +22,6 @@ interface ConversationListProps {
   onSelect: (conversation: Conversation) => void;
   conversations: Conversation[];
   onConversationsLoaded: (conversations: Conversation[]) => void;
-  /**
-   * Increment to force the fetch effect below to refire. The parent
-   * bumps this on realtime reconnect / tab visibility → visible so the
-   * list catches up on any events sent while the WS was disconnected
-   * or the tab was throttled. Optional so existing callers keep working.
-   */
   resyncToken?: number;
 }
 
@@ -56,7 +51,11 @@ export function ConversationList({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [selectedLine, setSelectedLine] = useState<string>("all");
+  const [selectedTag, setSelectedTag] = useState<string>("all");
+  const [selectedStage, setSelectedStage] = useState<string>("all");
   const [configs, setConfigs] = useState<any[]>([]);
+  const [tags, setTags] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [allStages, setAllStages] = useState<{ id: string; name: string; pipelineName: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
@@ -83,31 +82,40 @@ export function ConversationList({
     loadDrafts();
   }, [activeConversationId, loadDrafts]);
 
-  // Fetch configured lines for dropdown filter
+  // Fetch metadata (configs, tags, pipelines) for dropdown filters
   useEffect(() => {
     (async () => {
       try {
+        const supabase = createClient();
+
+        // 1. Fetch configs
         const res = await fetch("/api/whatsapp/config");
         const data = await res.json();
         setConfigs(data.configs || []);
+
+        // 2. Fetch tags
+        const { data: tagsData } = await supabase.from("tags").select("id, name, color").order("name");
+        setTags(tagsData ?? []);
+
+        // 3. Fetch pipelines & stages
+        const { data: pipelinesData } = await supabase
+          .from("pipelines")
+          .select("id, name, pipeline_stages(id, name, position)");
+
+        const stagesList: { id: string; name: string; pipelineName: string }[] = [];
+        pipelinesData?.forEach((p: any) => {
+          const sorted = [...(p.pipeline_stages || [])].sort((a, b) => a.position - b.position);
+          sorted.forEach((s: any) => {
+            stagesList.push({ id: s.id, name: s.name, pipelineName: p.name });
+          });
+        });
+        setAllStages(stagesList);
       } catch (err) {
-        console.error("Failed to load configs for filters:", err);
+        console.error("Failed to load metadata for filters:", err);
       }
     })();
   }, []);
 
-  // Keep the latest callback in a ref so the fetch effect below can
-  // have a stable, empty-dep identity. Previously the fetch useCallback
-  // depended on `onConversationsLoaded`, which depends on the parent's
-  // `deepLinkConvId` — so every URL change (including one the parent
-  // triggered via router.replace after a click) caused a fresh
-  // conversations fetch. That extra refetch was the trigger for the
-  // deep-link auto-select running a second time and wiping the active
-  // thread's messages.
-  // Mutation lives in an effect (not render) per React 19's refs rule;
-  // the fetch runs once on mount so it's fine to read the slightly
-  // older value — the very next render updates the ref for any
-  // subsequent async completion.
   const onConversationsLoadedRef = useRef(onConversationsLoaded);
   useEffect(() => {
     onConversationsLoadedRef.current = onConversationsLoaded;
@@ -120,19 +128,13 @@ export function ConversationList({
     (async () => {
       const { data, error } = await supabase
         .from("conversations")
-        .select("*, contact:contacts(*)")
+        .select("*, contact:contacts(*, contact_tags(tag:tags(id, name, color)), deals(id, stage_id, stage:pipeline_stages(id, name, pipeline:pipelines(id, name))))")
         .order("last_message_at", { ascending: false });
 
       if (cancelled) return;
 
       if (error) {
-        // Supabase errors have non-enumerable properties — log fields explicitly
-        console.error("Failed to fetch conversations:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
+        console.error("Failed to fetch conversations:", error);
         setLoading(false);
         return;
       }
@@ -144,16 +146,39 @@ export function ConversationList({
     return () => {
       cancelled = true;
     };
-    // `resyncToken` is included so the parent can force a refetch when
-    // the realtime channel reconnects or the tab regains focus — catches
-    // up on any events sent while the WS was disconnected or throttled.
   }, [resyncToken]);
+
+  const handleTogglePin = useCallback(async (e: React.MouseEvent, conv: Conversation) => {
+    e.stopPropagation();
+    const newPinned = !conv.is_pinned;
+    const supabase = createClient();
+
+    onConversationsLoadedRef.current(
+      conversations.map((c) => (c.id === conv.id ? { ...c, is_pinned: newPinned } : c))
+    );
+
+    const { error } = await supabase
+      .from("conversations")
+      .update({ is_pinned: newPinned })
+      .eq("id", conv.id);
+
+    if (error) {
+      console.error("Failed to pin conversation:", error);
+      toast.error("Erro ao fixar conversa");
+    } else {
+      toast.success(newPinned ? "Conversa fixada no topo!" : "Conversa desfixada");
+    }
+  }, [conversations]);
 
   const filtered = useMemo(() => {
     let result = [...conversations];
 
-    // Sort by last_message_at descending (newest messages first)
+    // Sort by is_pinned first (pinned conversations float to top), then last_message_at descending
     result.sort((a, b) => {
+      const pinA = a.is_pinned ? 1 : 0;
+      const pinB = b.is_pinned ? 1 : 0;
+      if (pinA !== pinB) return pinB - pinA;
+
       const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
       const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
       return timeB - timeA;
@@ -169,6 +194,20 @@ export function ConversationList({
       result = result.filter((c) => c.waha_session === selectedLine);
     }
 
+    if (selectedTag !== "all") {
+      result = result.filter((c) => {
+        const contactTags = (c.contact as any)?.contact_tags || [];
+        return contactTags.some((ct: any) => ct.tag?.name === selectedTag || ct.tag?.id === selectedTag);
+      });
+    }
+
+    if (selectedStage !== "all") {
+      result = result.filter((c) => {
+        const deals = (c.contact as any)?.deals || [];
+        return deals.some((d: any) => d.stage_id === selectedStage || d.stage?.id === selectedStage);
+      });
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((c) => {
@@ -180,7 +219,7 @@ export function ConversationList({
     }
 
     return result;
-  }, [conversations, filter, selectedLine, search]);
+  }, [conversations, filter, selectedLine, selectedTag, selectedStage, search]);
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,10 +254,10 @@ export function ConversationList({
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted">
-                Status: {activeFilter?.label ?? "All"}
+            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40">
+                Status: {activeFilter?.label ?? "Todos"}
                 <ChevronDown className="h-3 w-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -232,7 +271,7 @@ export function ConversationList({
                   className={cn(
                     "text-sm",
                     filter === opt.value
-                      ? "text-primary"
+                      ? "text-primary font-semibold"
                       : "text-popover-foreground"
                   )}
                 >
@@ -244,7 +283,7 @@ export function ConversationList({
 
           {configs.length > 0 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted truncate max-w-[150px]">
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[130px]">
                   Linha: {selectedLine === "all" ? "Todas" : (configs.find(c => c.waha_session === selectedLine)?.phone_info?.display_phone_number || selectedLine)}
                   <ChevronDown className="h-3 w-3" />
               </DropdownMenuTrigger>
@@ -256,7 +295,7 @@ export function ConversationList({
                   onClick={() => setSelectedLine("all")}
                   className={cn(
                     "text-sm",
-                    selectedLine === "all" ? "text-primary" : "text-popover-foreground"
+                    selectedLine === "all" ? "text-primary font-semibold" : "text-popover-foreground"
                   )}
                 >
                   Todas as Linhas
@@ -267,7 +306,7 @@ export function ConversationList({
                     onClick={() => setSelectedLine(c.waha_session)}
                     className={cn(
                       "text-sm",
-                      selectedLine === c.waha_session ? "text-primary" : "text-popover-foreground"
+                      selectedLine === c.waha_session ? "text-primary font-semibold" : "text-popover-foreground"
                     )}
                   >
                     {c.phone_info?.display_phone_number || c.waha_session}
@@ -276,15 +315,49 @@ export function ConversationList({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {tags.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[120px]">
+                Tag: {selectedTag === "all" ? "Todas" : selectedTag}
+                <ChevronDown className="h-3 w-3" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="border-border bg-popover max-h-60 overflow-y-auto">
+                <DropdownMenuItem onClick={() => setSelectedTag("all")} className={cn("text-sm", selectedTag === "all" ? "text-primary font-semibold" : "text-popover-foreground")}>
+                  Todas as Tags
+                </DropdownMenuItem>
+                {tags.map((t) => (
+                  <DropdownMenuItem key={t.id} onClick={() => setSelectedTag(t.name)} className={cn("text-sm flex items-center gap-1.5", selectedTag === t.name ? "text-primary font-semibold" : "text-popover-foreground")}>
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: t.color || "#888" }} />
+                    {t.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {allStages.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[130px]">
+                Etapa: {selectedStage === "all" ? "Todas" : (allStages.find(s => s.id === selectedStage)?.name || "Selecionada")}
+                <ChevronDown className="h-3 w-3" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="border-border bg-popover max-h-60 overflow-y-auto">
+                <DropdownMenuItem onClick={() => setSelectedStage("all")} className={cn("text-sm", selectedStage === "all" ? "text-primary font-semibold" : "text-popover-foreground")}>
+                  Todas as Etapas
+                </DropdownMenuItem>
+                {allStages.map((s) => (
+                  <DropdownMenuItem key={s.id} onClick={() => setSelectedStage(s.id)} className={cn("text-sm flex flex-col items-start", selectedStage === s.id ? "text-primary font-semibold" : "text-popover-foreground")}>
+                    <span>{s.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{s.pipelineName}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
-      {/* Conversation Items.
-          `min-h-0` is load-bearing: a flex child defaults to
-          min-height:auto, so without it this ScrollArea grows to fit
-          every conversation instead of shrinking to the remaining
-          space — the list then overflows and gets clipped by the
-          parent's overflow-hidden with no scrollbar (issue #229). */}
       <ScrollArea className="min-h-0 flex-1">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -303,6 +376,7 @@ export function ConversationList({
                 isActive={conv.id === activeConversationId}
                 draftText={drafts[conv.id]}
                 onSelect={handleSelect}
+                onTogglePin={handleTogglePin}
               />
             ))}
           </div>
@@ -317,6 +391,7 @@ interface ConversationItemProps {
   isActive: boolean;
   draftText?: string;
   onSelect: (conversation: Conversation) => void;
+  onTogglePin?: (e: React.MouseEvent, conversation: Conversation) => void;
 }
 
 const SENTIMENT_ICONS: Record<string, { emoji: string; color: string; label: string }> = {
@@ -331,10 +406,16 @@ function ConversationItem({
   isActive,
   draftText,
   onSelect,
+  onTogglePin,
 }: ConversationItemProps) {
   const contact = conversation.contact;
   const displayName = contact?.name || contact?.phone || "Desconhecido";
   const initials = displayName.charAt(0).toUpperCase();
+
+  const contactTags = (contact as any)?.contact_tags || [];
+  const deals = (contact as any)?.deals || [];
+  const currentDeal = deals[0];
+  const stageName = currentDeal?.stage?.name;
 
   const handleClick = useCallback(() => {
     onSelect(conversation);
@@ -354,15 +435,15 @@ function ConversationItem({
     : "";
 
   return (
-    <button
+    <div
       onClick={handleClick}
       className={cn(
-        "flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50",
+        "group/item relative flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50 cursor-pointer border-b border-border/30",
         isActive && "border-l-2 border-primary bg-muted/70"
       )}
     >
       {/* Avatar */}
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
         {contact?.avatar_url ? (
           <img
             src={contact.avatar_url}
@@ -376,22 +457,70 @@ function ConversationItem({
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">
-            {displayName}
-          </span>
-          <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo}</span>
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {conversation.is_pinned && (
+              <span title="Conversa Fixada">
+                <Pin className="h-3.5 w-3.5 shrink-0 text-amber-500 fill-amber-500" />
+              </span>
+            )}
+            <span className="truncate text-sm font-medium text-foreground">
+              {displayName}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10px] text-muted-foreground">{timeAgo}</span>
+            <button
+              type="button"
+              onClick={(e) => onTogglePin?.(e, conversation)}
+              className={cn(
+                "p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-opacity",
+                conversation.is_pinned ? "opacity-100 text-amber-500" : "opacity-0 group-hover/item:opacity-100"
+              )}
+              title={conversation.is_pinned ? "Desfixar conversa" : "Fixar conversa no topo"}
+            >
+              {conversation.is_pinned ? (
+                <PinOff className="h-3.5 w-3.5" />
+              ) : (
+                <Pin className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Line badge */}
-        {(conversation as any).waha_session && (
-          <div className="mt-0.5">
+        {/* Badges: Line, Stage, Tags */}
+        <div className="mt-1 flex flex-wrap gap-1 items-center">
+          {(conversation as any).waha_session && (
             <span className="inline-block text-[9px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 leading-none select-none">
               {(conversation as any).waha_session}
             </span>
-          </div>
-        )}
-        <div className="mt-0.5 flex items-center justify-between gap-2">
+          )}
+
+          {stageName && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 leading-none">
+              <Kanban className="h-2.5 w-2.5" />
+              {stageName}
+            </span>
+          )}
+
+          {contactTags.slice(0, 2).map((ct: any) => (
+            <span
+              key={ct.tag?.id || ct.id}
+              className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded border leading-none"
+              style={{
+                backgroundColor: (ct.tag?.color || '#888888') + '15',
+                borderColor: (ct.tag?.color || '#888888') + '40',
+                color: ct.tag?.color || 'currentColor'
+              }}
+            >
+              <TagIcon className="h-2.5 w-2.5" />
+              {ct.tag?.name}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-1 flex items-center justify-between gap-2">
           {draftText ? (
             <p className="truncate text-xs text-amber-500 font-medium">
               <span className="font-semibold">[Rascunho]:</span> {draftText}
@@ -427,6 +556,6 @@ function ConversationItem({
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }

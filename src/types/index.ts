@@ -153,6 +153,7 @@ export interface Conversation {
   last_message_text?: string;
   last_message_at?: string;
   unread_count: number;
+  is_pinned?: boolean;
   sentiment?: 'positive' | 'neutral' | 'negative' | 'mixed' | 'unknown';
   created_at: string;
   updated_at: string;

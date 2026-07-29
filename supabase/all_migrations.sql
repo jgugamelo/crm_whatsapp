@@ -4147,6 +4147,10 @@ ALTER TABLE wacrm.campaigns
   ADD COLUMN IF NOT EXISTS pipeline_id UUID REFERENCES wacrm.pipelines(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS stage_ids TEXT[] DEFAULT '{}';
 
+-- Pin conversation column
+ALTER TABLE wacrm.conversations
+  ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE;
+
 -- Re-grant schema permissions to roles so the new columns are queryable
 GRANT USAGE ON SCHEMA wacrm TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA wacrm TO anon, authenticated, service_role;
