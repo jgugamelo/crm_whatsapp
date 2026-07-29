@@ -4118,6 +4118,11 @@ ALTER TABLE wacrm.whatsapp_config
   ADD COLUMN IF NOT EXISTS proxy_username TEXT,
   ADD COLUMN IF NOT EXISTS proxy_password TEXT;
 
+-- Campaign funnel / pipeline stage filtering columns
+ALTER TABLE wacrm.campaigns
+  ADD COLUMN IF NOT EXISTS pipeline_id UUID REFERENCES wacrm.pipelines(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS stage_ids TEXT[] DEFAULT '{}';
+
 -- Re-grant schema permissions to roles so the new columns are queryable
 GRANT ALL ON ALL TABLES IN SCHEMA wacrm TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA wacrm TO anon, authenticated, service_role;

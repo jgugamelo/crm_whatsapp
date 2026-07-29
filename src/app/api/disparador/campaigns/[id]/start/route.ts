@@ -94,18 +94,49 @@ export async function POST(
       tags: tagsMap[c.id] || [],
     }));
 
+    // Pipeline Stage filtering
+    const stageIds = Array.isArray(campaign.stage_ids) ? campaign.stage_ids : [];
+    const pipelineId = campaign.pipeline_id;
+
+    let dealContactIdsSet: Set<string> | null = null;
+    if (stageIds.length > 0 || pipelineId) {
+      let dealsQuery = supabaseAdmin
+        .from("deals")
+        .select("contact_id")
+        .eq("account_id", campaign.account_id);
+
+      if (stageIds.length > 0) {
+        dealsQuery = dealsQuery.in("stage_id", stageIds);
+      } else if (pipelineId) {
+        dealsQuery = dealsQuery.eq("pipeline_id", pipelineId);
+      }
+
+      const { data: dealsList, error: dealsError } = await dealsQuery;
+      if (dealsError) {
+        throw new Error(`Erro ao carregar oportunidades do funil: ${dealsError.message}`);
+      }
+
+      dealContactIdsSet = new Set((dealsList ?? []).map((d) => d.contact_id).filter(Boolean));
+    }
+
     // Filter contacts by tag
     const tagsFiltro = Array.isArray(campaign.tags_filtro) ? campaign.tags_filtro : [];
-    const contacts = tagsFiltro.length > 0
-      ? contactsWithTags.filter((c) => {
-          const contactTags = Array.isArray(c.tags) ? c.tags : [];
-          return tagsFiltro.some((t: string) => contactTags.includes(t));
-        })
-      : contactsWithTags;
+    let contacts = contactsWithTags;
+
+    if (tagsFiltro.length > 0) {
+      contacts = contacts.filter((c) => {
+        const contactTags = Array.isArray(c.tags) ? c.tags : [];
+        return tagsFiltro.some((t: string) => contactTags.includes(t));
+      });
+    }
+
+    if (dealContactIdsSet !== null) {
+      contacts = contacts.filter((c) => dealContactIdsSet!.has(c.id));
+    }
 
     if (contacts.length === 0) {
       return NextResponse.json(
-        { error: "Nenhum contato encontrado com as tags de filtro selecionadas." },
+        { error: "Nenhum contato encontrado com as tags e etapas do funil de filtro selecionadas." },
         { status: 400 }
       );
     }

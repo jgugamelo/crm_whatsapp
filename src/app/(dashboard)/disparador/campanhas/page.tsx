@@ -18,7 +18,8 @@ import {
   Calendar,
   X,
   FileText,
-  ArrowLeft
+  ArrowLeft,
+  Kanban
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -34,6 +35,8 @@ interface Campaign {
   status: string;
   session_ids: string[];
   tags_filtro: string[];
+  pipeline_id?: string | null;
+  stage_ids?: string[];
   mensagens: any[];
   intervalo_min: number;
   intervalo_max: number;
@@ -46,6 +49,12 @@ interface TagItem {
   id: string;
   name: string;
   color?: string;
+}
+
+interface PipelineItem {
+  id: string;
+  name: string;
+  pipeline_stages: { id: string; name: string; position: number }[];
 }
 
 interface WahaSession {
@@ -74,6 +83,7 @@ export default function CampanhasPage() {
   const [loading, setLoading] = useState(true);
   const [tags, setTags] = useState<TagItem[]>([]);
   const [sessions, setSessions] = useState<WahaSession[]>([]);
+  const [pipelines, setPipelines] = useState<PipelineItem[]>([]);
 
   // Form Modal States
   const [showModal, setShowModal] = useState(false);
@@ -82,6 +92,8 @@ export default function CampanhasPage() {
   const [objetivo, setObjetivo] = useState("");
   const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
+  const [selectedStageIds, setSelectedStageIds] = useState<string[]>([]);
   const [intervaloMin, setIntervaloMin] = useState(30);
   const [intervaloMax, setIntervaloMax] = useState(60);
   const [janelaInicio, setJanelaInicio] = useState("08:00");
@@ -136,6 +148,13 @@ export default function CampanhasPage() {
       // Load Tags (filtered by user/account through RLS already, but we can load directly)
       const { data: tagList } = await supabase.from("tags").select("id, name, color").order("name");
       setTags(tagList ?? []);
+
+      // Load Pipelines & Stages
+      const { data: pipelineList } = await supabase
+        .from("pipelines")
+        .select("id, name, pipeline_stages(id, name, position)")
+        .eq("account_id", accountId);
+      setPipelines((pipelineList as any) ?? []);
 
       // Load Active WAHA Sessions for this account
       const { data: configList } = await supabase
@@ -238,6 +257,8 @@ export default function CampanhasPage() {
         objetivo,
         session_ids: selectedSessions,
         tags_filtro: selectedTags,
+        pipeline_id: selectedPipelineId || null,
+        stage_ids: selectedStageIds,
         mensagens,
         intervalo_min: intervaloMin,
         intervalo_max: intervaloMax,
@@ -264,6 +285,8 @@ export default function CampanhasPage() {
     setObjetivo("");
     setSelectedSessions([]);
     setSelectedTags([]);
+    setSelectedPipelineId("");
+    setSelectedStageIds([]);
     setMensagens([{ tipo: "texto", conteudo: "" }]);
     setIntervaloMin(30);
     setIntervaloMax(60);
@@ -457,6 +480,60 @@ export default function CampanhasPage() {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              {/* Filter by Funnel / Pipeline & Stage */}
+              <div className="space-y-3 border-t border-border/40 pt-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <Kanban className="h-3.5 w-3.5 text-primary" /> Filtro por Funil de Vendas (Opcional)
+                  </label>
+                  <select
+                    value={selectedPipelineId}
+                    onChange={(e) => {
+                      setSelectedPipelineId(e.target.value);
+                      setSelectedStageIds([]);
+                    }}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+                  >
+                    <option value="">Todos os Funis / Nenhum filtro de funil</option>
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedPipelineId && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Etapas do Funil (Opcional - Vazio envia para todas do funil)</label>
+                    <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto border border-border p-2 rounded-md bg-muted/10">
+                      {(() => {
+                        const currentPipeline = pipelines.find((p) => p.id === selectedPipelineId);
+                        const sortedStages = [...(currentPipeline?.pipeline_stages || [])].sort((a, b) => a.position - b.position);
+
+                        if (sortedStages.length === 0) {
+                          return <span className="text-[11px] text-muted-foreground">Nenhuma etapa encontrada neste funil.</span>;
+                        }
+
+                        return sortedStages.map((s) => (
+                          <label key={s.id} className="flex items-center gap-1.5 bg-muted/50 border border-border rounded px-2.5 py-1 text-xs cursor-pointer hover:bg-muted text-foreground">
+                            <input
+                              type="checkbox"
+                              checked={selectedStageIds.includes(s.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedStageIds([...selectedStageIds, s.id]);
+                                else setSelectedStageIds(selectedStageIds.filter((id) => id !== s.id));
+                              }}
+                            />
+                            {s.name}
+                          </label>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Delays and Windows */}
