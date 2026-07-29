@@ -4119,11 +4119,36 @@ ALTER TABLE wacrm.whatsapp_config
   ADD COLUMN IF NOT EXISTS proxy_password TEXT;
 
 -- Campaign funnel / pipeline stage filtering columns
+CREATE SCHEMA IF NOT EXISTS wacrm;
+SET search_path TO wacrm, public, extensions;
+
+CREATE TABLE IF NOT EXISTS wacrm.campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID REFERENCES wacrm.accounts(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  objetivo TEXT,
+  status TEXT NOT NULL DEFAULT 'rascunho',
+  session_ids UUID[] DEFAULT '{}',
+  tags_filtro TEXT[] DEFAULT '{}',
+  pipeline_id UUID REFERENCES wacrm.pipelines(id) ON DELETE SET NULL,
+  stage_ids TEXT[] DEFAULT '{}',
+  mensagens JSONB DEFAULT '[]',
+  intervalo_min INTEGER DEFAULT 30,
+  intervalo_max INTEGER DEFAULT 60,
+  janela_inicio TIME DEFAULT '08:00',
+  janela_fim TIME DEFAULT '18:00',
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 ALTER TABLE wacrm.campaigns
   ADD COLUMN IF NOT EXISTS pipeline_id UUID REFERENCES wacrm.pipelines(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS stage_ids TEXT[] DEFAULT '{}';
 
 -- Re-grant schema permissions to roles so the new columns are queryable
+GRANT USAGE ON SCHEMA wacrm TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA wacrm TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA wacrm TO anon, authenticated, service_role;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA wacrm TO anon, authenticated, service_role;
