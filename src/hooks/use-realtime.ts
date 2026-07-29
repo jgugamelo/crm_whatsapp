@@ -44,31 +44,48 @@ export function useRealtime({
 
     const supabase = createClient();
 
+    const handleMessagePayload = (payload: any) => {
+      onMessageRef.current?.({
+        eventType: payload.eventType as RealtimeEvent<Message>["eventType"],
+        new: payload.new as Message,
+        old: payload.old as Partial<Message>,
+      });
+    };
+
+    const handleConversationPayload = (payload: any) => {
+      onConversationRef.current?.({
+        eventType: payload.eventType as RealtimeEvent<Conversation>["eventType"],
+        new: payload.new as Conversation,
+        old: payload.old as Partial<Conversation>,
+      });
+    };
+
     const channel = supabase
       .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "wacrm", table: "messages" },
-        (payload) => {
-          onMessageRef.current?.({
-            eventType: payload.eventType as RealtimeEvent<Message>["eventType"],
-            new: payload.new as Message,
-            old: payload.old as Partial<Message>,
-          });
-        }
+        handleMessagePayload
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        handleMessagePayload
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "wacrm", table: "conversations" },
-        (payload) => {
-          onConversationRef.current?.({
-            eventType: payload.eventType as RealtimeEvent<Conversation>["eventType"],
-            new: payload.new as Conversation,
-            old: payload.old as Partial<Conversation>,
-          });
-        }
+        handleConversationPayload
       )
-      .subscribe((status) => {
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations" },
+        handleConversationPayload
+      )
+      .subscribe((status, err) => {
+        if (err) {
+          console.warn("[useRealtime] Realtime subscription warning/error:", err);
+        }
         setIsConnected(status === "SUBSCRIBED");
       });
 

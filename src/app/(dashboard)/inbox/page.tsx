@@ -372,9 +372,16 @@ export default function InboxPage() {
     };
     window.addEventListener("focus", onVisibility);
     document.addEventListener("visibilitychange", onVisibility);
+
+    // Automatic polling fallback every 5 seconds while active
+    const pollingInterval = setInterval(() => {
+      setResyncToken((n) => n + 1);
+    }, 5000);
+
     return () => {
       window.removeEventListener("focus", onVisibility);
       document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(pollingInterval);
     };
   }, []);
 
