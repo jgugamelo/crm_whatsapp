@@ -98,6 +98,7 @@ export default function CampanhasPage() {
   const [intervaloMax, setIntervaloMax] = useState(60);
   const [janelaInicio, setJanelaInicio] = useState("08:00");
   const [janelaFim, setJanelaFim] = useState("18:00");
+  const [iniciarImediatamente, setIniciarImediatamente] = useState(true);
   const [mensagens, setMensagens] = useState<any[]>([{ tipo: "texto", conteudo: "" }]);
 
   // Load Data on Mount/Change
@@ -267,10 +268,29 @@ export default function CampanhasPage() {
         status: "rascunho",
       };
 
-      const { error } = await supabase.from("campaigns").insert(campaignData);
-      if (error) throw error;
+      const { data: createdRows, error } = await supabase
+        .from("campaigns")
+        .insert(campaignData)
+        .select("id");
 
-      toast.success("Campanha criada!");
+      if (error) throw error;
+      const createdId = createdRows?.[0]?.id;
+
+      if (iniciarImediatamente && createdId) {
+        try {
+          const res = await fetch(`/api/disparador/campaigns/${createdId}/start`, { method: "POST" });
+          if (res.ok) {
+            toast.success("Campanha criada e disparos iniciados! 🚀");
+          } else {
+            toast.success("Campanha criada com sucesso!");
+          }
+        } catch {
+          toast.success("Campanha criada com sucesso!");
+        }
+      } else {
+        toast.success("Campanha salva como rascunho!");
+      }
+
       setShowModal(false);
       resetForm();
       loadData();
@@ -664,6 +684,35 @@ export default function CampanhasPage() {
                       </button>
                     </div>
 
+                    {(msg.tipo === "texto" || msg.tipo === "ia") && (
+                      <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground mr-1">Inserir Variável:</span>
+                        {[
+                          { label: "{nome}", value: "{nome}" },
+                          { label: "{primeiro_nome}", value: "{primeiro_nome}" },
+                          { label: "{telefone}", value: "{telefone}" },
+                          { label: "{email}", value: "{email}" },
+                        ].map((vChip) => (
+                          <button
+                            key={vChip.value}
+                            type="button"
+                            onClick={() => {
+                              const updated = [...mensagens];
+                              if (msg.tipo === "texto") {
+                                updated[i].conteudo = (updated[i].conteudo || "") + vChip.value;
+                              } else {
+                                updated[i].prompt = (updated[i].prompt || "") + vChip.value;
+                              }
+                              setMensagens(updated);
+                            }}
+                            className="px-2 py-0.5 text-[10px] font-mono rounded bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                          >
+                            + {vChip.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {msg.tipo === "texto" && (
                       <textarea
                         value={msg.conteudo}
@@ -672,8 +721,8 @@ export default function CampanhasPage() {
                           updated[i].conteudo = e.target.value;
                           setMensagens(updated);
                         }}
-                        placeholder="Escreva a mensagem..."
-                        className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none resize-none"
+                        placeholder="Escreva a mensagem... Use {nome}, {primeiro_nome}, {telefone} para personalizar."
+                        className="w-full min-h-[70px] rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none resize-none"
                       />
                     )}
 
@@ -685,8 +734,8 @@ export default function CampanhasPage() {
                           updated[i].prompt = e.target.value;
                           setMensagens(updated);
                         }}
-                        placeholder="Escreva o prompt da IA... Ex: Peça para comprar o curso X com tom consultivo."
-                        className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none resize-none"
+                        placeholder="Escreva o prompt da IA... Ex: Peça para comprar o curso X com tom consultivo usando {nome}."
+                        className="w-full min-h-[70px] rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none resize-none"
                       />
                     )}
 
@@ -811,9 +860,26 @@ export default function CampanhasPage() {
                 </Button>
               </div>
 
+              {/* Checkbox Iniciar Imediatamente */}
+              <div className="flex items-center gap-2 border-t border-border/40 pt-4">
+                <input
+                  type="checkbox"
+                  id="iniciarImediatamente"
+                  checked={iniciarImediatamente}
+                  onChange={(e) => setIniciarImediatamente(e.target.checked)}
+                  className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                />
+                <label htmlFor="iniciarImediatamente" className="text-xs font-medium text-foreground cursor-pointer flex items-center gap-1.5">
+                  <span>Iniciar disparos imediatamente após criar a campanha</span>
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Recomendado</span>
+                </label>
+              </div>
+
               <footer className="pt-4 border-t border-border flex justify-end gap-3 bg-muted/10 p-4 rounded-b-xl -mx-6 -mb-6">
                 <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-                <Button type="submit">Criar Campanha</Button>
+                <Button type="submit">
+                  {iniciarImediatamente ? "Criar e Iniciar Disparos 🚀" : "Criar Campanha"}
+                </Button>
               </footer>
             </form>
           </div>
