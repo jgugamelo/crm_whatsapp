@@ -4530,10 +4530,10 @@ DROP POLICY IF EXISTS campaigns_insert ON wacrm.campaigns;
 DROP POLICY IF EXISTS campaigns_update ON wacrm.campaigns;
 DROP POLICY IF EXISTS campaigns_delete ON wacrm.campaigns;
 
-CREATE POLICY campaigns_select ON wacrm.campaigns FOR SELECT USING (wacrm.is_account_member(account_id));
-CREATE POLICY campaigns_insert ON wacrm.campaigns FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, 'agent'));
-CREATE POLICY campaigns_update ON wacrm.campaigns FOR UPDATE USING (wacrm.is_account_member(account_id, 'agent'));
-CREATE POLICY campaigns_delete ON wacrm.campaigns FOR DELETE USING (wacrm.is_account_member(account_id, 'agent'));
+CREATE POLICY campaigns_select ON wacrm.campaigns FOR SELECT USING (wacrm.is_account_member(account_id, 'viewer'::text));
+CREATE POLICY campaigns_insert ON wacrm.campaigns FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, 'agent'::text));
+CREATE POLICY campaigns_update ON wacrm.campaigns FOR UPDATE USING (wacrm.is_account_member(account_id, 'agent'::text));
+CREATE POLICY campaigns_delete ON wacrm.campaigns FOR DELETE USING (wacrm.is_account_member(account_id, 'agent'::text));
 
 -- Enable RLS on campaign_dispatches if table exists
 DO $$
@@ -4546,10 +4546,10 @@ BEGIN
     EXECUTE 'DROP POLICY IF EXISTS campaign_dispatches_update ON wacrm.campaign_dispatches;';
     EXECUTE 'DROP POLICY IF EXISTS campaign_dispatches_delete ON wacrm.campaign_dispatches;';
 
-    EXECUTE 'CREATE POLICY campaign_dispatches_select ON wacrm.campaign_dispatches FOR SELECT USING (wacrm.is_account_member(account_id));';
-    EXECUTE 'CREATE POLICY campaign_dispatches_insert ON wacrm.campaign_dispatches FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, ''agent''));';
-    EXECUTE 'CREATE POLICY campaign_dispatches_update ON wacrm.campaign_dispatches FOR UPDATE USING (wacrm.is_account_member(account_id, ''agent''));';
-    EXECUTE 'CREATE POLICY campaign_dispatches_delete ON wacrm.campaign_dispatches FOR DELETE USING (wacrm.is_account_member(account_id, ''agent''));';
+    EXECUTE 'CREATE POLICY campaign_dispatches_select ON wacrm.campaign_dispatches FOR SELECT USING (wacrm.is_account_member(account_id, ''viewer''::text));';
+    EXECUTE 'CREATE POLICY campaign_dispatches_insert ON wacrm.campaign_dispatches FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, ''agent''::text));';
+    EXECUTE 'CREATE POLICY campaign_dispatches_update ON wacrm.campaign_dispatches FOR UPDATE USING (wacrm.is_account_member(account_id, ''agent''::text));';
+    EXECUTE 'CREATE POLICY campaign_dispatches_delete ON wacrm.campaign_dispatches FOR DELETE USING (wacrm.is_account_member(account_id, ''agent''::text));';
   END IF;
 END $$;
 
@@ -4622,10 +4622,10 @@ DROP POLICY IF EXISTS disp_message_queue_insert ON wacrm.disp_message_queue;
 DROP POLICY IF EXISTS disp_message_queue_update ON wacrm.disp_message_queue;
 DROP POLICY IF EXISTS disp_message_queue_delete ON wacrm.disp_message_queue;
 
-CREATE POLICY disp_message_queue_select ON wacrm.disp_message_queue FOR SELECT USING (wacrm.is_account_member(account_id));
-CREATE POLICY disp_message_queue_insert ON wacrm.disp_message_queue FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, 'agent'));
-CREATE POLICY disp_message_queue_update ON wacrm.disp_message_queue FOR UPDATE USING (wacrm.is_account_member(account_id, 'agent'));
-CREATE POLICY disp_message_queue_delete ON wacrm.disp_message_queue FOR DELETE USING (wacrm.is_account_member(account_id, 'agent'));
+CREATE POLICY disp_message_queue_select ON wacrm.disp_message_queue FOR SELECT USING (wacrm.is_account_member(account_id, 'viewer'::text));
+CREATE POLICY disp_message_queue_insert ON wacrm.disp_message_queue FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, 'agent'::text));
+CREATE POLICY disp_message_queue_update ON wacrm.disp_message_queue FOR UPDATE USING (wacrm.is_account_member(account_id, 'agent'::text));
+CREATE POLICY disp_message_queue_delete ON wacrm.disp_message_queue FOR DELETE USING (wacrm.is_account_member(account_id, 'agent'::text));
 
 GRANT ALL ON ALL TABLES IN SCHEMA wacrm TO anon, authenticated, service_role;
 

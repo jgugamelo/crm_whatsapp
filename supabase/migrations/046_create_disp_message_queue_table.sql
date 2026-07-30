@@ -64,9 +64,9 @@ DROP POLICY IF EXISTS disp_message_queue_insert ON wacrm.disp_message_queue;
 DROP POLICY IF EXISTS disp_message_queue_update ON wacrm.disp_message_queue;
 DROP POLICY IF EXISTS disp_message_queue_delete ON wacrm.disp_message_queue;
 
-CREATE POLICY disp_message_queue_select ON wacrm.disp_message_queue FOR SELECT USING (wacrm.is_account_member(account_id));
-CREATE POLICY disp_message_queue_insert ON wacrm.disp_message_queue FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, 'agent'));
-CREATE POLICY disp_message_queue_update ON wacrm.disp_message_queue FOR UPDATE USING (wacrm.is_account_member(account_id, 'agent'));
-CREATE POLICY disp_message_queue_delete ON wacrm.disp_message_queue FOR DELETE USING (wacrm.is_account_member(account_id, 'agent'));
+CREATE POLICY disp_message_queue_select ON wacrm.disp_message_queue FOR SELECT USING (wacrm.is_account_member(account_id, 'viewer'::text));
+CREATE POLICY disp_message_queue_insert ON wacrm.disp_message_queue FOR INSERT WITH CHECK (wacrm.is_account_member(account_id, 'agent'::text));
+CREATE POLICY disp_message_queue_update ON wacrm.disp_message_queue FOR UPDATE USING (wacrm.is_account_member(account_id, 'agent'::text));
+CREATE POLICY disp_message_queue_delete ON wacrm.disp_message_queue FOR DELETE USING (wacrm.is_account_member(account_id, 'agent'::text));
 
 GRANT ALL ON ALL TABLES IN SCHEMA wacrm TO anon, authenticated, service_role;
