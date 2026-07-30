@@ -43,12 +43,16 @@ export function ProfileForm() {
   const [saving, setSaving] = useState(false);
   const [emailChangePending, setEmailChangePending] = useState(false);
 
-  // Seed form state once the profile loads.
+  // Seed form state once the profile or user loads.
   useEffect(() => {
-    if (!profile) return;
-    setFullName(profile.full_name ?? '');
-    setEmail(profile.email ?? '');
-  }, [profile]);
+    if (profile) {
+      setFullName(profile.full_name ?? '');
+      setEmail(profile.email ?? user?.email ?? '');
+    } else if (user) {
+      setEmail(user.email ?? '');
+      setFullName((user.user_metadata?.full_name as string) ?? '');
+    }
+  }, [profile, user]);
 
   // Cleanup object URLs to avoid leaks.
   useEffect(() => {
@@ -207,8 +211,8 @@ export function ProfileForm() {
   return (
     <section className="max-w-2xl animate-in fade-in-50 duration-200">
       <SettingsPanelHead
-        title="Your profile"
-        description="How you show up across the app. Your avatar and name appear in the header, sidebar, and anywhere your teammates see you."
+        title="Seu perfil"
+        description="Como você aparece no sistema. Sua foto e seu nome aparecem no cabeçalho, na barra lateral e para seus colegas de equipe."
       />
       <form onSubmit={onSubmit} className="space-y-4">
         <Card>
@@ -239,7 +243,7 @@ export function ProfileForm() {
                 disabled={saving}
               >
                 <Upload className="size-4" />
-                {currentAvatar ? 'Change photo' : 'Upload photo'}
+                {currentAvatar ? 'Alterar foto' : 'Enviar foto'}
               </Button>
               {currentAvatar && (
                 <Button
@@ -250,11 +254,11 @@ export function ProfileForm() {
                   className="text-muted-foreground hover:text-foreground"
                 >
                   <Trash2 className="size-4" />
-                  Remove
+                  Remover
                 </Button>
               )}
               <p className="w-full text-xs text-muted-foreground">
-                PNG, JPG, WebP, or GIF. Up to 2 MB.
+                PNG, JPG, WebP ou GIF. Até 2 MB.
               </p>
             </div>
           </div>
@@ -262,13 +266,13 @@ export function ProfileForm() {
           {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="profile-full-name" className="text-foreground">
-              Display name
+              Nome de exibição
             </Label>
             <Input
               id="profile-full-name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Ada Lovelace"
+              placeholder="ex: Maria Silva"
               maxLength={120}
               disabled={saving}
               required
@@ -278,7 +282,7 @@ export function ProfileForm() {
           {/* Email */}
           <div className="space-y-2">
             <Label htmlFor="profile-email" className="text-foreground">
-              Email
+              E-mail
             </Label>
             <Input
               id="profile-email"
@@ -292,9 +296,8 @@ export function ProfileForm() {
               <p className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 <Mail className="mt-0.5 size-3.5 shrink-0" />
                 <span>
-                  Check the inbox for <strong>{profile?.email}</strong> and{' '}
-                  <strong>{email}</strong> — both need to confirm before the
-                  change takes effect.
+                  Verifique a caixa de entrada de <strong>{profile?.email}</strong> e{' '}
+                  <strong>{email}</strong> para confirmar a alteração.
                 </span>
               </p>
             )}
@@ -303,21 +306,29 @@ export function ProfileForm() {
           {/* Read-only block */}
           <div className="rounded-lg border border-border bg-muted p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Account details
+              Detalhes da Conta
             </p>
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-muted-foreground">Role</dt>
-                <dd className="mt-0.5 font-mono text-foreground">
-                  {profile?.role ?? 'user'}
+                <dt className="text-muted-foreground">Função / Cargo</dt>
+                <dd className="mt-0.5 font-mono text-foreground capitalize">
+                  {profile?.account_role === 'owner'
+                    ? 'Proprietário'
+                    : profile?.account_role === 'admin'
+                    ? 'Administrador'
+                    : profile?.account_role === 'agent'
+                    ? 'Consultor'
+                    : profile?.account_role === 'viewer'
+                    ? 'Visualizador'
+                    : profile?.account_role ?? 'Membro'}
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Joined</dt>
+                <dt className="text-muted-foreground">Membro desde</dt>
                 <dd className="mt-0.5 text-foreground">{joined}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-muted-foreground">User ID</dt>
+                <dt className="text-muted-foreground">ID do Usuário</dt>
                 <dd className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
                   {user?.id ?? '—'}
                 </dd>
@@ -325,25 +336,18 @@ export function ProfileForm() {
             </dl>
           </div>
 
-          {!profile && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CircleAlert className="size-4" />
-              Loading your profile…
-            </p>
-          )}
-
         </CardContent>
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={saving || !dirty || !profile}>
+          <Button type="submit" disabled={saving || !dirty}>
             {saving ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Saving…
+                Salvando…
               </>
             ) : (
-              'Save changes'
+              'Salvar alterações'
             )}
           </Button>
         </div>

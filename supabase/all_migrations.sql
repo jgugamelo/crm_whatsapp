@@ -4451,3 +4451,52 @@ GRANT EXECUTE ON FUNCTION public.redeem_invitation(TEXT) TO authenticated, servi
 CREATE OR REPLACE FUNCTION wacrm.redeem_invitation(p_token_hash TEXT) RETURNS UUID AS $$
   SELECT public.redeem_invitation(p_token_hash);
 $$ LANGUAGE sql SECURITY DEFINER;
+
+-- Migration 044: Fix is_account_member search_path & RLS Evaluation for wacrm Schema
+CREATE OR REPLACE FUNCTION wacrm.is_account_member(
+  target_account_id UUID,
+  min_role wacrm.account_role_enum DEFAULT 'viewer'
+) RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = wacrm, public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM wacrm.profiles p
+    WHERE p.user_id = auth.uid()
+      AND p.account_id = target_account_id
+      AND CASE p.account_role
+            WHEN 'owner'  THEN 4
+            WHEN 'admin'  THEN 3
+            WHEN 'agent'  THEN 2
+            WHEN 'viewer' THEN 1
+          END
+        >=
+          CASE min_role
+            WHEN 'owner'  THEN 4
+            WHEN 'admin'  THEN 3
+            WHEN 'agent'  THEN 2
+            WHEN 'viewer' THEN 1
+          END
+  );
+$$;
+
+ALTER FUNCTION wacrm.is_account_member(UUID, wacrm.account_role_enum) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION wacrm.is_account_member(UUID, wacrm.account_role_enum) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.is_account_member(
+  target_account_id UUID,
+  min_role TEXT DEFAULT 'viewer'
+) RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = wacrm, public
+AS $$
+  SELECT wacrm.is_account_member(target_account_id, min_role::wacrm.account_role_enum);
+$$;
+
+ALTER FUNCTION public.is_account_member(UUID, TEXT) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION public.is_account_member(UUID, TEXT) TO authenticated, service_role;
