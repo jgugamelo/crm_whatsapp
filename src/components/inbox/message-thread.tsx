@@ -952,17 +952,17 @@ export function MessageThread({
               displayName.charAt(0).toUpperCase()
             )}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
               {conversation.sentiment && conversation.sentiment !== "unknown" && (
                 <span
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium border select-none transition-all duration-200",
-                    conversation.sentiment === "positive" && "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-                    conversation.sentiment === "negative" && "bg-rose-500/10 text-rose-400 border-rose-500/20",
-                    conversation.sentiment === "neutral" && "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                    conversation.sentiment === "mixed" && "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border select-none whitespace-nowrap shrink-0 transition-all duration-200",
+                    conversation.sentiment === "positive" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400",
+                    conversation.sentiment === "negative" && "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400",
+                    conversation.sentiment === "neutral" && "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400",
+                    conversation.sentiment === "mixed" && "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
                   )}
                   title={`Sentimento: ${conversation.sentiment}`}
                 >
@@ -980,7 +980,7 @@ export function MessageThread({
           <Badge
             variant="outline"
             className={cn(
-              "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2",
+              "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2 shrink-0",
               sessionInfo.expired ? "text-red-400" : "text-primary"
             )}
           >
@@ -989,7 +989,7 @@ export function MessageThread({
           </Badge>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2">
+        <div className="flex items-center justify-end gap-1.5 shrink-0">
           {/* Contact-panel toggle — desktop only. The contact sidebar
               eats a chunk of horizontal width that crowds the thread on
               smaller laptops; this lets agents reclaim it when they just
@@ -1005,7 +1005,7 @@ export function MessageThread({
               aria-pressed={contactPanelOpen}
               title={contactPanelOpen ? "Ocultar contato" : "Exibir contato"}
               className={cn(
-                "hidden h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted hover:text-foreground lg:inline-flex",
+                "hidden h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted hover:text-foreground lg:inline-flex shrink-0",
                 contactPanelOpen ? "text-primary" : "text-muted-foreground",
               )}
             >
@@ -1069,7 +1069,7 @@ export function MessageThread({
           {/* WhatsApp Line dropdown */}
           {configs.length > 1 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1.5 px-1.5 sm:px-2 text-[11px] sm:text-xs rounded-md hover:bg-muted text-primary font-medium truncate max-w-[150px] sm:max-w-none border border-border/40">
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1.5 px-2 text-xs font-medium rounded-lg bg-muted/60 hover:bg-muted border border-border/50 text-primary transition-colors shrink-0 max-w-[130px] sm:max-w-[160px]">
                 <span
                   className={cn(
                     "size-2 rounded-full shrink-0",
@@ -1086,7 +1086,7 @@ export function MessageThread({
                 <span className="truncate">
                   Linha: {configs.find(c => c.waha_session === conversation.waha_session)?.phone_info?.display_phone_number || conversation.waha_session || "Selecione..."}
                 </span>
-                <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 opacity-70" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
@@ -1135,7 +1135,7 @@ export function MessageThread({
                   currentStatus?.color ?? "text-muted-foreground"
                 )}>
                 {currentStatus?.label ?? "Status"}
-                <ChevronDown className="h-3 w-3 opacity-70" />
+                <ChevronDown className="h-3 w-3 opacity-70 shrink-0" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
@@ -1157,7 +1157,7 @@ export function MessageThread({
           <DropdownMenu>
             <DropdownMenuTrigger
               className={cn(
-                "inline-flex items-center justify-center h-7 gap-1 px-2.5 text-xs font-medium rounded-lg bg-muted/60 hover:bg-muted border border-border/50 transition-colors shrink-0 max-w-[160px]",
+                "inline-flex items-center justify-center h-7 gap-1 px-2.5 text-xs font-medium rounded-lg bg-muted/60 hover:bg-muted border border-border/50 transition-colors shrink-0 max-w-[130px] sm:max-w-[150px]",
                 assignedAgentId ? "text-primary font-semibold" : "text-muted-foreground"
               )}
             >
