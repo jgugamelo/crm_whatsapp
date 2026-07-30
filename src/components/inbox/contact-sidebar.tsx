@@ -305,10 +305,9 @@ export function ContactSidebar({
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="flex h-full w-70 flex-col border-l border-border bg-card">
-      <ScrollArea className="flex-1">
-        <div className="p-4">
-          {/* Contact Info */}
+    <div className="flex h-full w-80 flex-col border-l border-border bg-card overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Contact Info */}
           <div className="flex flex-col items-center text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-lg font-semibold text-foreground">
               {contact.avatar_url ? (
@@ -741,11 +740,10 @@ export function ContactSidebar({
                     </p>
                   </div>
                 ))}
-              </div>
             </div>
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
