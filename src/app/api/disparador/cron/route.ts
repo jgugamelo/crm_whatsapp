@@ -229,9 +229,21 @@ export async function POST(request: Request) {
 }
 
 function checkWithinWindow(inicio: string, fim: string): boolean {
-  const now = new Date();
-  const [hInicio, mInicio] = inicio.split(":").map(Number);
-  const [hFim, mFim] = fim.split(":").map(Number);
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  return nowMinutes >= hInicio * 60 + mInicio && nowMinutes <= hFim * 60 + mFim;
+  if (!inicio || !fim) return true;
+  try {
+    const nowStr = new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
+    const now = new Date(nowStr);
+    const [hInicio, mInicio] = inicio.split(":").map(Number);
+    const [hFim, mFim] = fim.split(":").map(Number);
+
+    if (isNaN(hInicio) || isNaN(mInicio) || isNaN(hFim) || isNaN(mFim)) return true;
+
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = hInicio * 60 + mInicio;
+    const endMinutes = hFim * 60 + mFim;
+
+    return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
+  } catch (err) {
+    return true;
+  }
 }
