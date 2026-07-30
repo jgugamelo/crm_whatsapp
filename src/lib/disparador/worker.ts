@@ -8,7 +8,7 @@ import {
   sendWahaStopTyping,
   startWacallsCall,
   playWacallsAudio,
-  getWacallsCallStatus
+  getWacallsCallStatus,
 } from "@/lib/whatsapp/waha-api";
 import { decrypt } from "@/lib/whatsapp/encryption";
 import OpenAI from "openai";
@@ -24,87 +24,122 @@ let intervalId: NodeJS.Timeout | null = null;
 
 export function ensureQueueWorkerRunning() {
   if (isWorkerRunning) {
+    // Process a batch immediately even if worker is already running
+    processQueueBatch().catch((err) =>
+      console.error("[Queue Worker] Batch execution error:", err)
+    );
     return;
   }
+
   isWorkerRunning = true;
   console.log("[Queue Worker] Global background queue worker initialized.");
 
+  // Process immediately on start
+  processQueueBatch().catch((err) =>
+    console.error("[Queue Worker] Initial batch execution error:", err)
+  );
+
   // Check queue every 5 seconds
-  intervalId = setInterval(async () => {
-    try {
-      // 1. Fetch campaigns that are in execution
-      const { data: activeCampaigns } = await supabaseAdmin
-        .from("campaigns")
-        .select("id, status, created_by, janela_inicio, janela_fim")
-        .eq("status", "em_execucao");
+  intervalId = setInterval(() => {
+    processQueueBatch().catch((err) =>
+      console.error("[Queue Worker] Recurring batch execution error:", err)
+    );
+  }, 5000);
+}
 
-      if (!activeCampaigns || activeCampaigns.length === 0) {
-        return;
-      }
+export async function processQueueBatch() {
+  try {
+    // 1. Fetch campaigns that are in execution
+    const { data: activeCampaigns, error: activeErr } = await supabaseAdmin
+      .from("campaigns")
+      .select("id, status, created_by, janela_inicio, janela_fim")
+      .eq("status", "em_execucao");
 
-      for (const campaign of activeCampaigns) {
-        let currentItem: any = null;
-        try {
-          // Validate time window
-          if (
-            campaign.janela_inicio &&
-            campaign.janela_fim &&
-            campaign.janela_inicio !== "00:00" &&
-            campaign.janela_fim !== "23:59"
-          ) {
-            const isWithinWindow = checkWithinWindow(campaign.janela_inicio, campaign.janela_fim);
-            if (!isWithinWindow) {
-              continue; // Skip this campaign for now
-            }
+    if (activeErr) {
+      console.error("[Queue Worker] Error fetching active campaigns:", activeErr.message);
+      return;
+    }
+
+    if (!activeCampaigns || activeCampaigns.length === 0) {
+      return;
+    }
+
+    for (const campaign of activeCampaigns) {
+      let currentItem: any = null;
+      try {
+        // Validate time window
+        if (
+          campaign.janela_inicio &&
+          campaign.janela_fim &&
+          campaign.janela_inicio !== "00:00" &&
+          campaign.janela_fim !== "23:59"
+        ) {
+          const isWithinWindow = checkWithinWindow(campaign.janela_inicio, campaign.janela_fim);
+          if (!isWithinWindow) {
+            continue; // Skip this campaign for now outside valid window
           }
+        }
 
-          // Fetch the next scheduled item from queue for this campaign
-          const now = new Date().toISOString();
-          const { data: item, error: queryError } = await supabaseAdmin
+        // Fetch the next scheduled item from queue for this campaign (NO embedded join to prevent 404/relationship cache errors)
+        const now = new Date().toISOString();
+        const { data: item, error: queryError } = await supabaseAdmin
+          .from("disp_message_queue")
+          .select("*")
+          .eq("campaign_id", campaign.id)
+          .eq("status", "agendado")
+          .lte("scheduled_at", now)
+          .order("scheduled_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (queryError) {
+          console.error("[Queue Worker] Query error:", queryError.message);
+          continue;
+        }
+
+        // If queue is empty for this campaign, check if we should set status to completed
+        if (!item) {
+          const { count } = await supabaseAdmin
             .from("disp_message_queue")
-            .select("*, contacts(name, phone)")
+            .select("*", { count: "exact", head: true })
             .eq("campaign_id", campaign.id)
-            .eq("status", "agendado")
-            .lte("scheduled_at", now)
-            .order("scheduled_at", { ascending: true })
-            .limit(1)
+            .eq("status", "agendado");
+
+          if (count === 0) {
+            console.log(`[Queue Worker] Campaign ${campaign.id} completed. Updating status to encerrada.`);
+            await supabaseAdmin
+              .from("campaigns")
+              .update({ status: "encerrada" })
+              .eq("id", campaign.id);
+          }
+          continue;
+        }
+
+        currentItem = item;
+
+        // Lock item to prevent concurrent processing
+        await supabaseAdmin
+          .from("disp_message_queue")
+          .update({ status: "enviando" })
+          .eq("id", item.id);
+
+        console.log(`[Queue Worker] Processing scheduled item ${item.id} for campaign ${campaign.id}`);
+
+        // Fetch contact details separately
+        let contactData: { name?: string; phone?: string } | null = null;
+        if (item.contact_id) {
+          const { data: c } = await supabaseAdmin
+            .from("contacts")
+            .select("name, phone")
+            .eq("id", item.contact_id)
             .maybeSingle();
+          contactData = c;
+        }
 
-          if (queryError) {
-            console.error("[Queue Worker] Query error:", queryError.message);
-            continue;
-          }
+        const phone = contactData?.phone || item.mensagem_final || "";
 
-          // If queue is empty for this campaign, check if we should set status to completed
-          if (!item) {
-            const { count } = await supabaseAdmin
-              .from("disp_message_queue")
-              .select("*", { count: "exact", head: true })
-              .eq("campaign_id", campaign.id)
-              .eq("status", "agendado");
-
-            if (count === 0) {
-              console.log(`[Queue Worker] Campaign ${campaign.id} completed. Updating status to encerrada.`);
-              await supabaseAdmin
-                .from("campaigns")
-                .update({ status: "encerrada" })
-                .eq("id", campaign.id);
-            }
-            continue;
-          }
-
-          currentItem = item;
-
-          // Lock item to prevent concurrent process
-          await supabaseAdmin
-            .from("disp_message_queue")
-            .update({ status: "enviando" })
-            .eq("id", item.id);
-
-          console.log(`[Queue Worker] Processing scheduled item ${item.id} for campaign ${campaign.id}`);
-
-          // Check if contact is blacklisted
-          const phone = item.contacts?.phone || item.mensagem_final;
+        // Check if contact is blacklisted
+        if (phone) {
           const { data: blacklisted } = await supabaseAdmin
             .from("blacklist")
             .select("id")
@@ -114,207 +149,226 @@ export function ensureQueueWorkerRunning() {
           if (blacklisted) {
             await supabaseAdmin
               .from("disp_message_queue")
-              .update({ status: "bloqueado", erro: "Número na Blacklist" })
+              .update({ status: "bloqueado", error_message: "Número na Blacklist" })
               .eq("id", item.id);
             continue;
           }
+        }
 
-          // Fetch WAHA config using id or waha_session name
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.session_id);
-          let config: any = null;
+        // Fetch WAHA config using session_id as ID or waha_session name
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.session_id);
+        let config: any = null;
 
-          if (isUuid) {
-            const { data } = await supabaseAdmin
-              .from("whatsapp_config")
-              .select("*")
-              .eq("id", item.session_id)
-              .maybeSingle();
-            config = data;
+        if (isUuid) {
+          const { data } = await supabaseAdmin
+            .from("whatsapp_config")
+            .select("*")
+            .eq("id", item.session_id)
+            .maybeSingle();
+          config = data;
+        }
+
+        if (!config) {
+          const { data } = await supabaseAdmin
+            .from("whatsapp_config")
+            .select("*")
+            .eq("waha_session", item.session_id)
+            .maybeSingle();
+          config = data;
+        }
+
+        if (!config || (config.provider && config.provider !== "waha")) {
+          throw new Error("Conexão do WhatsApp WAHA não encontrada ou inativa para esta sessão");
+        }
+
+        // Build decrypted config
+        const decryptedApiKey = config.waha_api_key ? decrypt(config.waha_api_key) : null;
+        const wahaConfig = {
+          waha_url: config.waha_url,
+          waha_session: config.waha_session,
+          waha_api_key: decryptedApiKey,
+        };
+
+        // Render message
+        const tipo = item.tipo || "texto";
+        let messageText = item.mensagem_final || "";
+
+        if (tipo === "ia") {
+          const accountId = config.account_id;
+          const { data: aiConfig } = accountId
+            ? await supabaseAdmin
+                .from("ai_config")
+                .select("api_key")
+                .eq("account_id", accountId)
+                .maybeSingle()
+            : { data: null };
+
+          const activeApiKey = aiConfig?.api_key?.trim() || process.env.OPENAI_API_KEY;
+
+          if (activeApiKey) {
+            try {
+              const openai = new OpenAI({ apiKey: activeApiKey });
+              const completion = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                  {
+                    role: "system",
+                    content: "Você é um assistente de vendas para WhatsApp. Gere uma mensagem natural, sem parecer spam. Responda APENAS com a mensagem, sem explicações.",
+                  },
+                  {
+                    role: "user",
+                    content: `Contato: nome=${contactData?.name || ""}. Prompt: ${messageText}`,
+                  },
+                ],
+                max_tokens: 500,
+              });
+              messageText = completion.choices[0]?.message?.content || messageText;
+            } catch (aiErr) {
+              console.warn("AI generation failed, fallback to prompt text:", aiErr);
+            }
+          }
+        }
+
+        // Substitute name variables
+        const cleanText = messageText.replace(/{nome}/g, contactData?.name || "Cliente");
+        const normalizedPhone = phone.replace("+", "");
+
+        // Human simulation presence (anti-ban)
+        if (tipo !== "ligacao") {
+          await sendWahaSeen(wahaConfig, normalizedPhone);
+          await sendWahaStartTyping(wahaConfig, normalizedPhone);
+          const typingDelay = 1500 + Math.floor(Math.random() * 1500);
+          await new Promise((resolve) => setTimeout(resolve, typingDelay));
+        }
+
+        // Trigger sending via WAHA or WaCalls
+        let wahaMessageId = "";
+        if (tipo === "imagem") {
+          const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "image", "imagem.png", cleanText);
+          wahaMessageId = res.messageId;
+        } else if (tipo === "video") {
+          const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "video", "video.mp4", cleanText);
+          wahaMessageId = res.messageId;
+        } else if (tipo === "audio") {
+          const res = await sendWahaVoiceMessage(wahaConfig, normalizedPhone, item.media_url);
+          wahaMessageId = res.messageId;
+        } else if (tipo === "arquivo") {
+          const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "document", "documento", cleanText);
+          wahaMessageId = res.messageId;
+        } else if (tipo === "ligacao") {
+          const { callId } = await startWacallsCall(wahaConfig, normalizedPhone);
+          if (!callId) {
+            throw new Error("Não foi possível gerar um CallID para a ligação");
           }
 
-          if (!config) {
-            const { data } = await supabaseAdmin
-              .from("whatsapp_config")
-              .select("*")
-              .eq("waha_session", item.session_id)
-              .maybeSingle();
-            config = data;
-          }
+          let isConnected = false;
+          let ended = false;
 
-          if (!config || (config.provider && config.provider !== "waha")) {
-            throw new Error("Conexão do WhatsApp WAHA não encontrada ou inativa para esta sessão");
-          }
-
-          // Build decrypted config
-          const decryptedApiKey = config.waha_api_key ? decrypt(config.waha_api_key) : null;
-          const wahaConfig = {
-            waha_url: config.waha_url,
-            waha_session: config.waha_session,
-            waha_api_key: decryptedApiKey,
-          };
-
-          // Render message
-          const tipo = item.tipo || "texto";
-          let messageText = item.mensagem_final;
-
-          if (tipo === "ia") {
-            const accountId = config.account_id;
-            const { data: aiConfig } = accountId
-              ? await supabaseAdmin
-                  .from("ai_config")
-                  .select("api_key")
-                  .eq("account_id", accountId)
-                  .maybeSingle()
-              : { data: null };
-
-            const activeApiKey = aiConfig?.api_key?.trim() || process.env.OPENAI_API_KEY;
-
-            if (activeApiKey) {
-              try {
-                const openai = new OpenAI({ apiKey: activeApiKey });
-                const completion = await openai.chat.completions.create({
-                  model: "gpt-4o-mini",
-                  messages: [
-                    {
-                      role: "system",
-                      content: "Você é um assistente de vendas para WhatsApp. Gere uma mensagem natural, sem parecer spam. Responda APENAS com a mensagem, sem explicações.",
-                    },
-                    {
-                      role: "user",
-                      content: `Contato: nome=${item.contacts?.name || ""}. Prompt: ${messageText}`,
-                    },
-                  ],
-                  max_tokens: 500,
-                });
-                messageText = completion.choices[0]?.message?.content || messageText;
-              } catch (aiErr) {
-                console.warn("AI generation failed, fallback to prompt text:", aiErr);
-              }
+          for (let attempt = 0; attempt < 25; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const statusRes = await getWacallsCallStatus(wahaConfig, callId);
+            if (statusRes.status === "connected") {
+              isConnected = true;
+              break;
+            }
+            if (statusRes.status === "ended" || statusRes.status === "failed") {
+              ended = true;
+              break;
             }
           }
 
-          // Substitute name variable
-          const cleanText = messageText.replace(/{nome}/g, item.contacts?.name || "Cliente");
-          const normalizedPhone = phone.replace("+", "");
-
-          // Human simulation presence (anti-ban)
-          if (tipo !== "ligacao") {
-            await sendWahaSeen(wahaConfig, normalizedPhone);
-            await sendWahaStartTyping(wahaConfig, normalizedPhone);
-            // Simulate 1.5 - 3 seconds typing delay
-            const typingDelay = 1500 + Math.floor(Math.random() * 1500);
-            await new Promise((resolve) => setTimeout(resolve, typingDelay));
+          if (!isConnected || ended) {
+            throw new Error("A ligação não foi atendida pelo destinatário");
           }
 
-          // Trigger sending via WAHA or WaCalls
-          let wahaMessageId = "";
-          if (tipo === "imagem") {
-            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "image", "imagem.png", cleanText);
-            wahaMessageId = res.messageId;
-          } else if (tipo === "video") {
-            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "video", "video.mp4", cleanText);
-            wahaMessageId = res.messageId;
-          } else if (tipo === "audio") {
-            const res = await sendWahaVoiceMessage(wahaConfig, normalizedPhone, item.media_url);
-            wahaMessageId = res.messageId;
-          } else if (tipo === "arquivo") {
-            const res = await sendWahaMediaMessage(wahaConfig, normalizedPhone, item.media_url, "document", "documento", cleanText);
-            wahaMessageId = res.messageId;
-          } else if (tipo === "ligacao") {
-            // 1. Inicia a chamada via WaCalls
-            const { callId } = await startWacallsCall(wahaConfig, normalizedPhone);
-            if (!callId) {
-              throw new Error("Não foi possível gerar um CallID para a ligação");
-            }
-
-            // 2. Aguarda a ligação ser atendida (connected)
-            let isConnected = false;
-            let ended = false;
-
-            // Monitora a cada 2 segundos por no máximo 25 vezes (50 segundos total)
-            for (let attempt = 0; attempt < 25; attempt++) {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              try {
-                const callInfo = await getWacallsCallStatus(wahaConfig, callId);
-                if (callInfo.status === "connected") {
-                  isConnected = true;
-                  break;
-                }
-                if (callInfo.ended || callInfo.status === "ended") {
-                  ended = true;
-                  break;
-                }
-              } catch (statusErr) {
-                console.warn(`[Queue Worker] Failed to check status for call ${callId}:`, statusErr);
-              }
-            }
-
-            if (!isConnected) {
-              throw new Error(ended ? "Chamada rejeitada ou encerrada pelo destinatário" : "Chamada não atendida (tempo esgotado)");
-            }
-
-            // 3. Toca o áudio associado na ligação
+          if (item.media_url) {
             await playWacallsAudio(wahaConfig, callId, item.media_url);
-            wahaMessageId = `call_${callId}`;
+          }
+        } else {
+          // Default text message
+          const res = await sendWahaTextMessage(wahaConfig, normalizedPhone, cleanText);
+          wahaMessageId = res.messageId;
+        }
+
+        if (tipo !== "ligacao") {
+          await sendWahaStopTyping(wahaConfig, normalizedPhone);
+        }
+
+        // Update queue item as sent
+        const nowSent = new Date().toISOString();
+        await supabaseAdmin
+          .from("disp_message_queue")
+          .update({
+            status: "enviado",
+            processed_at: nowSent,
+            wamid: wahaMessageId,
+            error_message: null,
+          })
+          .eq("id", item.id);
+
+        // Record in conversation messages history
+        let conversationId = null;
+        if (item.contact_id) {
+          const { data: conv } = await supabaseAdmin
+            .from("conversations")
+            .select("id")
+            .eq("contact_id", item.contact_id)
+            .maybeSingle();
+
+          if (conv) {
+            conversationId = conv.id;
           } else {
-            const res = await sendWahaTextMessage(wahaConfig, normalizedPhone, cleanText);
-            wahaMessageId = res.messageId;
+            const { data: newConv } = await supabaseAdmin
+              .from("conversations")
+              .insert({
+                account_id: config.account_id,
+                contact_id: item.contact_id,
+                status: "aberta",
+                whatsapp_config_id: config.id,
+              })
+              .select("id")
+              .single();
+            conversationId = newConv?.id;
           }
+        }
 
-          if (tipo !== "ligacao") {
-            await sendWahaStopTyping(wahaConfig, normalizedPhone);
-          }
-
-          // Update queue item status to success
-          await supabaseAdmin
-            .from("disp_message_queue")
-            .update({
-              status: "enviado",
-              sent_at: new Date().toISOString(),
-              waha_message_id: wahaMessageId,
-              tentativas: (item.tentativas || 0) + 1,
-            })
-            .eq("id", item.id);
-
-          // Log in message logs
-          await supabaseAdmin.from("message_logs").insert({
-            queue_id: item.id,
-            campaign_id: item.campaign_id,
-            contact_id: item.contact_id,
-            session_id: item.session_id,
+        if (conversationId) {
+          await supabaseAdmin.from("messages").insert({
+            account_id: config.account_id,
+            conversation_id: conversationId,
             direcao: "saida",
             mensagem: cleanText,
             status: "enviado",
             waha_message_id: wahaMessageId,
           });
+        }
 
-          // Increment campaign statistics safely
-          try {
-            await supabaseAdmin.rpc("increment_campaign_metric", {
-              p_campaign_id: item.campaign_id,
-              p_field: "total_enviados",
-            });
-          } catch (metricErr) {
-            // Ignore if RPC doesn't exist
-          }
-        } catch (itemErr: any) {
-          console.error(`[Queue Worker] Error processing item for campaign ${campaign.id}:`, itemErr);
-          if (currentItem) {
-            await supabaseAdmin
-              .from("disp_message_queue")
-              .update({
-                status: "erro",
-                erro: itemErr.message || String(itemErr),
-                tentativas: (currentItem.tentativas || 0) + 1,
-              })
-              .eq("id", currentItem.id);
-          }
+        // Increment campaign statistics safely
+        try {
+          await supabaseAdmin.rpc("increment_campaign_metric", {
+            p_campaign_id: item.campaign_id,
+            p_field: "total_enviados",
+          });
+        } catch (metricErr) {
+          // Ignore if RPC doesn't exist
+        }
+      } catch (itemErr: any) {
+        console.error(`[Queue Worker] Error processing item for campaign ${campaign.id}:`, itemErr);
+        if (currentItem) {
+          await supabaseAdmin
+            .from("disp_message_queue")
+            .update({
+              status: "erro",
+              error_message: itemErr.message || String(itemErr),
+              attempts: (currentItem.attempts || 0) + 1,
+            })
+            .eq("id", currentItem.id);
         }
       }
-    } catch (err: any) {
-      console.error("[Queue Worker] Error executing send in global background thread:", err);
     }
-  }, 5000); // Check every 5 seconds
+  } catch (err: any) {
+    console.error("[Queue Worker] Error executing send in global background thread:", err);
+  }
 }
 
 function checkWithinWindow(inicio: string, fim: string): boolean {

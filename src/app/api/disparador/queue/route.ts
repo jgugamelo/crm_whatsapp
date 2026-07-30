@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 
+import { processQueueBatch, ensureQueueWorkerRunning } from "@/lib/disparador/worker";
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_ROLE_KEY || "",
@@ -10,6 +12,8 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: Request) {
   try {
+    ensureQueueWorkerRunning();
+    processQueueBatch().catch((err) => console.error("[GET /api/disparador/queue] Worker batch error:", err));
     const supabaseUser = await createServerClient();
     const {
       data: { user },
