@@ -4301,6 +4301,17 @@ CREATE OR REPLACE FUNCTION wacrm.redeem_invitation(p_token_hash TEXT) RETURNS UU
 $$ LANGUAGE sql SECURITY DEFINER;
 
 -- Migration 043: Fix User Bootstrapping Triggers & Resilient Invitation Redemption
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type t 
+    JOIN pg_namespace n ON n.oid = t.typnamespace 
+    WHERE t.typname = 'account_role_enum' AND n.nspname = 'wacrm'
+  ) THEN
+    CREATE TYPE wacrm.account_role_enum AS ENUM ('owner', 'admin', 'agent', 'viewer');
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION wacrm.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -4423,7 +4434,7 @@ BEGIN
     v_caller_email,
     v_caller_name,
     v_inv.account_id,
-    v_inv.role::wacrm.account_role_enum
+    v_inv.role::text::wacrm.account_role_enum
   )
   ON CONFLICT (user_id) DO UPDATE
   SET account_id = EXCLUDED.account_id,
@@ -4455,7 +4466,7 @@ $$ LANGUAGE sql SECURITY DEFINER;
 -- Migration 044: Fix is_account_member search_path & RLS Evaluation for wacrm Schema
 CREATE OR REPLACE FUNCTION wacrm.is_account_member(
   target_account_id UUID,
-  min_role wacrm.account_role_enum DEFAULT 'viewer'
+  min_role TEXT DEFAULT 'viewer'
 ) RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
@@ -4467,11 +4478,12 @@ AS $$
     FROM wacrm.profiles p
     WHERE p.user_id = auth.uid()
       AND p.account_id = target_account_id
-      AND CASE p.account_role
+      AND CASE p.account_role::text
             WHEN 'owner'  THEN 4
             WHEN 'admin'  THEN 3
             WHEN 'agent'  THEN 2
             WHEN 'viewer' THEN 1
+            ELSE 0
           END
         >=
           CASE min_role
@@ -4479,12 +4491,13 @@ AS $$
             WHEN 'admin'  THEN 3
             WHEN 'agent'  THEN 2
             WHEN 'viewer' THEN 1
+            ELSE 1
           END
   );
 $$;
 
-ALTER FUNCTION wacrm.is_account_member(UUID, wacrm.account_role_enum) OWNER TO postgres;
-GRANT EXECUTE ON FUNCTION wacrm.is_account_member(UUID, wacrm.account_role_enum) TO authenticated, service_role;
+ALTER FUNCTION wacrm.is_account_member(UUID, TEXT) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION wacrm.is_account_member(UUID, TEXT) TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.is_account_member(
   target_account_id UUID,
@@ -4495,8 +4508,11 @@ STABLE
 SECURITY DEFINER
 SET search_path = wacrm, public
 AS $$
-  SELECT wacrm.is_account_member(target_account_id, min_role::wacrm.account_role_enum);
+  SELECT wacrm.is_account_member(target_account_id, min_role);
 $$;
+
+ALTER FUNCTION public.is_account_member(UUID, TEXT) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION public.is_account_member(UUID, TEXT) TO authenticated, service_role;
 
 ALTER FUNCTION public.is_account_member(UUID, TEXT) OWNER TO postgres;
 GRANT EXECUTE ON FUNCTION public.is_account_member(UUID, TEXT) TO authenticated, service_role;

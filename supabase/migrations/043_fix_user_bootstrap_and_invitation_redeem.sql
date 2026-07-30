@@ -1,5 +1,17 @@
 -- Migration 043: Fix User Bootstrapping Triggers & Resilient Invitation Redemption
 
+-- Ensure type exists in wacrm schema for backwards compatibility
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type t 
+    JOIN pg_namespace n ON n.oid = t.typnamespace 
+    WHERE t.typname = 'account_role_enum' AND n.nspname = 'wacrm'
+  ) THEN
+    CREATE TYPE wacrm.account_role_enum AS ENUM ('owner', 'admin', 'agent', 'viewer');
+  END IF;
+END $$;
+
 -- 1. Fix handle_new_user trigger in wacrm and public schemas
 CREATE OR REPLACE FUNCTION wacrm.handle_new_user()
 RETURNS TRIGGER
@@ -130,7 +142,7 @@ BEGIN
     v_caller_email,
     v_caller_name,
     v_inv.account_id,
-    v_inv.role::wacrm.account_role_enum
+    v_inv.role::text::wacrm.account_role_enum
   )
   ON CONFLICT (user_id) DO UPDATE
   SET account_id = EXCLUDED.account_id,
