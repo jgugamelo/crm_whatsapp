@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -91,11 +91,14 @@ export function ContactSidebar({
     }
   };
 
+  const conversationId = conversation?.id;
+  const loadedConvIdRef = useRef<string | null>(null);
+
   const handleAnalyzeSentiment = useCallback(async () => {
-    if (!conversation) return;
+    if (!conversationId) return;
     setAnalyzing(true);
     try {
-      const res = await fetch(`/api/conversations/${conversation.id}/sentiment`, {
+      const res = await fetch(`/api/conversations/${conversationId}/sentiment`, {
         method: "POST",
       });
       const data = await res.json();
@@ -109,13 +112,13 @@ export function ContactSidebar({
     } finally {
       setAnalyzing(false);
     }
-  }, [conversation, onUpdateConversation]);
+  }, [conversationId, onUpdateConversation]);
 
   const handleGenerateReplySuggestion = useCallback(async () => {
-    if (!conversation) return;
+    if (!conversationId) return;
     setGeneratingReply(true);
     try {
-      const res = await fetch(`/api/conversations/${conversation.id}/suggest-reply`, {
+      const res = await fetch(`/api/conversations/${conversationId}/suggest-reply`, {
         method: "POST",
       });
       const data = await res.json();
@@ -127,15 +130,21 @@ export function ContactSidebar({
     } finally {
       setGeneratingReply(false);
     }
-  }, [conversation]);
+  }, [conversationId]);
 
-  // Auto-analyze sentiment and generate reply suggestion when conversation opens or changes
+  // Auto-analyze sentiment and generate reply suggestion ONCE per conversation ID
   useEffect(() => {
-    if (conversation?.id) {
+    if (!conversationId) return;
+    if (loadedConvIdRef.current === conversationId) return;
+    loadedConvIdRef.current = conversationId;
+
+    setSuggestedReply(""); // Reset suggestion when switching conversations
+
+    if (!conversation?.sentiment || conversation.sentiment === "unknown") {
       handleAnalyzeSentiment();
-      handleGenerateReplySuggestion();
     }
-  }, [conversation?.id, handleAnalyzeSentiment, handleGenerateReplySuggestion]);
+    handleGenerateReplySuggestion();
+  }, [conversationId, conversation?.sentiment, handleAnalyzeSentiment, handleGenerateReplySuggestion]);
 
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
