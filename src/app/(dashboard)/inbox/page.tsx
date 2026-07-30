@@ -11,6 +11,7 @@ import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { toast } from "sonner";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { notifyNewMessage, notifyNewLead } from "@/lib/notifications";
 
 // Remembers the agent's show/hide choice for the desktop contact panel
 // across reloads and sessions (device-scoped, like the theme prefs).
@@ -188,6 +189,16 @@ export default function InboxPage() {
       const currentActive = activeConversationRef.current;
 
       if (event.eventType === "INSERT") {
+        // Trigger notification sound & browser alert for incoming customer messages
+        if (newMsg.sender_type === "customer") {
+          const conv = conversations.find((c) => c.id === newMsg.conversation_id);
+          notifyNewMessage(
+            conv?.contact?.name || "Cliente",
+            newMsg.content_text || "",
+            newMsg.conversation_id
+          );
+        }
+
         // Add to messages if it belongs to active conversation
         if (
           currentActive &&
@@ -242,7 +253,7 @@ export default function InboxPage() {
         );
       }
     },
-    [activeConversation, hydrateConversation]
+    [activeConversation, hydrateConversation, conversations]
   );
 
   // Handle realtime conversation events
@@ -255,11 +266,13 @@ export default function InboxPage() {
       const conv = event.new;
 
       if (event.eventType === "INSERT") {
-        // Prepend immediately for snappy UX so the new conv shows in the
-        // list right away, then hydrate to fill in the `contact` join
-        // (realtime payloads never include joins). Skip both if we
-        // already have the row — that shouldn't happen normally, but
-        // out-of-order delivery would have us prepending a duplicate.
+        // Trigger lead notification sound & browser alert
+        notifyNewLead(
+          conv.contact?.name || "Novo Lead",
+          conv.contact?.phone || "",
+          conv.id
+        );
+
         if (!knownConvIdsRef.current.has(conv.id)) {
           setConversations((prev) => {
             if (prev.some((c) => c.id === conv.id)) return prev;

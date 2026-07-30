@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
+import { LogOut, Menu, Settings as SettingsIcon, User, Bell, BellOff } from "lucide-react";
+import { requestNotificationPermission, playNotificationSound } from "@/lib/notifications";
 import {
   Avatar,
   AvatarFallback,
@@ -52,6 +54,22 @@ export function Header({ onOpenSidebar }: HeaderProps) {
   const { profile, accountRole, signOut } = useAuth();
   const title = getPageTitle(pathname);
 
+  const [notifGranted, setNotifGranted] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotifGranted(Notification.permission === "granted");
+    }
+  }, []);
+
+  const handleToggleNotif = async () => {
+    const granted = await requestNotificationPermission();
+    setNotifGranted(granted);
+    if (granted) {
+      playNotificationSound("lead");
+    }
+  };
+
   const canEditSettings = accountRole === "owner" || accountRole === "admin";
   const displayName =
     profile?.full_name?.trim() ||
@@ -76,6 +94,19 @@ export function Header({ onOpenSidebar }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
+        <button
+          type="button"
+          onClick={handleToggleNotif}
+          title={notifGranted ? "Notificações ativadas" : "Clique para ativar notificações"}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {notifGranted ? (
+            <Bell className="h-4 w-4 text-primary" />
+          ) : (
+            <BellOff className="h-4 w-4 text-amber-500" />
+          )}
+        </button>
+
         <ModeToggle />
 
         <DropdownMenu>

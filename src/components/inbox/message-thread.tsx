@@ -987,7 +987,7 @@ export function MessageThread({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2">
           {/* Contact-panel toggle — desktop only. The contact sidebar
               eats a chunk of horizontal width that crowds the thread on
               smaller laptops; this lets agents reclaim it when they just
@@ -1015,11 +1015,6 @@ export function MessageThread({
             </button>
           )}
 
-          {/* Manual refresh — forces a refetch of the messages + the
-              conversation list (the parent bumps its resyncToken). Useful
-              when realtime missed an event or the agent just wants to be
-              sure nothing's stale. Only rendered when the parent wires
-              up `onRefresh`. */}
           {/* WhatsApp WebRTC VoIP Call Button */}
           {whatsappProvider === "waha" && contact?.phone && (
             <button
@@ -1027,7 +1022,7 @@ export function MessageThread({
               onClick={() => startOutboundCall(contact.phone)}
               aria-label="Iniciar chamada de voz"
               title="Ligar pelo WhatsApp"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400 shrink-0"
             >
               <Phone className="h-4 w-4" />
             </button>
@@ -1041,7 +1036,7 @@ export function MessageThread({
               aria-label="Atualizar conversa"
               title="Atualizar"
               className={cn(
-                "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60",
+                "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60 shrink-0",
               )}
             >
               <RefreshCw
@@ -1058,7 +1053,7 @@ export function MessageThread({
               aria-label="Deletar conversa"
               title="Deletar Conversa"
               className={cn(
-                "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-red-400 disabled:opacity-60",
+                "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-red-400 disabled:opacity-60 shrink-0",
               )}
             >
               {isDeleting ? (
@@ -1072,9 +1067,11 @@ export function MessageThread({
           {/* WhatsApp Line dropdown */}
           {configs.length > 1 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted text-primary font-medium">
-                Linha: {configs.find(c => c.waha_session === conversation.waha_session)?.phone_info?.display_phone_number || conversation.waha_session || "Selecione..."}
-                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-1.5 sm:px-2 text-[11px] sm:text-xs rounded-md hover:bg-muted text-primary font-medium truncate max-w-[140px] sm:max-w-none">
+                <span className="truncate">
+                  Linha: {configs.find(c => c.waha_session === conversation.waha_session)?.phone_info?.display_phone_number || conversation.waha_session || "Selecione..."}
+                </span>
+                <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
