@@ -132,7 +132,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const supabase = createClient();
     setProfileLoading(true);
     try {
-      const { data, error } = await supabase
+      // Check for pending invite in localStorage to auto-redeem
+      if (typeof window !== "undefined") {
+        const pendingInvite = localStorage.getItem("wacrm_pending_invite");
+        if (pendingInvite) {
+          try {
+            const res = await fetch(`/api/invitations/${encodeURIComponent(pendingInvite)}/redeem`, { method: "POST" });
+            if (res.ok) {
+              localStorage.removeItem("wacrm_pending_invite");
+            }
+          } catch (e) {
+            console.error("[AuthProvider] pending invite redeem error:", e);
+          }
+        }
+      }
+
+      let { data, error } = await supabase
         .from("profiles")
         .select(
           "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
@@ -147,26 +162,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hint: error.hint,
           code: error.code,
         });
-        return;
+      }
+
+      // If profile is missing, attempt to bootstrap it from auth.getUser() metadata
+      if (!data) {
+        const { data: authUserData } = await supabase.auth.getUser();
+        const authUser = authUserData.user;
+        if (authUser) {
+          const email = authUser.email || "";
+          const fullName = (authUser.user_metadata?.full_name as string) || "";
+          
+          const { data: createdProfile } = await supabase
+            .from("profiles")
+            .upsert(
+              {
+                user_id: userId,
+                email,
+                full_name: fullName,
+                role: "admin",
+                account_role: "owner",
+              },
+              { onConflict: "user_id" }
+            )
+            .select("id, full_name, email, avatar_url, role, beta_features, account_id, account_role")
+            .maybeSingle();
+
+          if (createdProfile) {
+            data = createdProfile;
+          }
+        }
       }
 
       if (data) {
-        // Load the account with a plain lookup by id instead of an
-        // embedded FK join. The embed (`account:accounts!inner(...)`)
-        // forces PostgREST to resolve the profiles.account_id →
-        // accounts.id relationship from its schema cache; a stale cache
-        // (common right after a migration adds the FK) makes it fail
-        // hard with PGRST200 and blanks the whole profile — the user
-        // then loses account context everywhere (issue #294). A point
-        // lookup by id needs no relationship inference, so the profile
-        // (with account_id / account_role) still resolves even if the
-        // account name lookup itself can't.
         let accountRow: AccountSummary | null = null;
         if (data.account_id) {
           const { data: account, error: accountErr } = await supabase
             .from("accounts")
-            // default_currency added in migration 021; narrowed to the
-            // USD fallback below for older schemas where it reads null.
             .select("id, name, default_currency, logo_url")
             .eq("id", data.account_id)
             .maybeSingle();
@@ -187,25 +218,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Narrow the DB enum into our AccountRole union. The DB
-        // constraint should make this unconditional, but a future
-        // migration that broadens the enum without updating TS would
-        // otherwise crash here — fall back to null and let UI gates
-        // treat the caller as least-privileged.
         const accountRole = isAccountRole(data.account_role)
           ? data.account_role
           : null;
 
+        const rawName = data.full_name?.trim();
+        const fallbackName = data.email ? data.email.split("@")[0] : "Usuário";
+        const finalName = rawName && rawName !== "" ? rawName : fallbackName;
+
         setProfile({
           id: data.id,
-          full_name: data.full_name,
+          full_name: finalName,
           email: data.email,
           avatar_url: data.avatar_url,
           role: data.role,
-          // `beta_features` is `NOT NULL DEFAULT ARRAY[]` in the DB, but
-          // narrow defensively in case the column hasn't been migrated yet
-          // (older deployments running 011 lazily) — `null` reads as no
-          // opt-ins, which is the safe default for any future beta gate.
           beta_features: data.beta_features ?? [],
           account_id: data.account_id ?? null,
           account_role: accountRole,

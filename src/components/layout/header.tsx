@@ -36,26 +36,28 @@ function getPageTitle(pathname: string): string {
   return match ? match[1] : "Dashboard";
 }
 
+import { useRouter } from "next/navigation";
+
 interface HeaderProps {
-  /** Wired to the shell's drawer state. Used only on mobile — the
-   *  hamburger button is hidden on lg+. */
   onOpenSidebar?: () => void;
 }
 
 export function Header({ onOpenSidebar }: HeaderProps) {
   const pathname = usePathname();
-  const { profile, signOut } = useAuth();
+  const router = useRouter();
+  const { profile, accountRole, signOut } = useAuth();
   const title = getPageTitle(pathname);
 
-  const initial =
-    profile?.full_name?.charAt(0)?.toUpperCase() ??
-    profile?.email?.charAt(0)?.toUpperCase() ??
-    "U";
+  const canEditSettings = accountRole === "owner" || accountRole === "admin";
+  const displayName =
+    profile?.full_name?.trim() ||
+    (profile?.email ? profile.email.split("@")[0] : "Usuário");
+
+  const initial = displayName.charAt(0).toUpperCase() || "U";
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-6">
       <div className="flex min-w-0 items-center gap-2">
-        {/* Hamburger — mobile only. 44×44 hit target per Apple HIG. */}
         <button
           type="button"
           onClick={onOpenSidebar}
@@ -73,70 +75,64 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         <ModeToggle />
 
         <DropdownMenu>
-        <DropdownMenuTrigger
-          className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/70 focus:bg-muted/70 focus:outline-none data-popup-open:bg-muted/70 sm:gap-3 sm:pl-1 sm:pr-3"
-          aria-label="Abrir menu da conta"
-        >
-          <Avatar className="size-8">
-            {profile?.avatar_url ? (
-              <AvatarImage
-                src={profile.avatar_url}
-                alt={profile.full_name ?? "Avatar"}
-              />
-            ) : null}
-            <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-              {initial}
-            </AvatarFallback>
-          </Avatar>
-          <span className="hidden text-sm font-medium text-foreground sm:inline">
-            {profile?.full_name ?? "Usuário"}
-          </span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          sideOffset={6}
-          className="min-w-56 bg-popover text-popover-foreground ring-border"
-        >
-          <div className="px-2 py-1.5">
-            <p className="truncate text-sm font-medium text-foreground">
-              {profile?.full_name ?? "Usuário"}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {profile?.email ?? ""}
-            </p>
-          </div>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem
-            render={
-              <Link
-                href="/settings?tab=profile"
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-              />
-            }
+          <DropdownMenuTrigger
+            className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted/70 focus:bg-muted/70 focus:outline-none data-popup-open:bg-muted/70 sm:gap-3 sm:pl-1 sm:pr-3"
+            aria-label="Abrir menu da conta"
           >
-            <User className="size-4" />
-            Perfil
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            render={
-              <Link
-                href="/settings?tab=whatsapp"
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-              />
-            }
+            <Avatar className="size-8">
+              {profile?.avatar_url ? (
+                <AvatarImage
+                  src={profile.avatar_url}
+                  alt={displayName}
+                />
+              ) : null}
+              <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                {initial}
+              </AvatarFallback>
+            </Avatar>
+            <span className="hidden text-sm font-medium text-foreground sm:inline">
+              {displayName}
+            </span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            sideOffset={6}
+            className="min-w-56 bg-popover text-popover-foreground ring-border"
           >
-            <SettingsIcon className="size-4" />
-            Configurações
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem
-            onClick={signOut}
-            className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-          >
-            <LogOut className="size-4" />
-            Sair
-          </DropdownMenuItem>
-        </DropdownMenuContent>
+            <div className="px-2 py-1.5">
+              <p className="truncate text-sm font-medium text-foreground">
+                {displayName}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {profile?.email ?? ""}
+              </p>
+            </div>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              onClick={() => router.push("/settings?tab=profile")}
+              className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+            >
+              <User className="size-4" />
+              Perfil
+            </DropdownMenuItem>
+            {canEditSettings && (
+              <DropdownMenuItem
+                onClick={() => router.push("/settings")}
+                className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+              >
+                <SettingsIcon className="size-4" />
+                Configurações
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              onClick={signOut}
+              className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+            >
+              <LogOut className="size-4" />
+              Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>

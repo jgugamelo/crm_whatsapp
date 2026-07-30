@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -106,6 +106,7 @@ interface SidebarProps {
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
 
@@ -328,70 +329,75 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               ) : null}
             </div>
           ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
-              <Avatar className="size-8 shrink-0">
-                {profile?.avatar_url ? (
-                  <AvatarImage
-                    src={profile.avatar_url}
-                    alt={profile.full_name ?? "Avatar"}
-                  />
-                ) : null}
-                <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                  {profile?.full_name?.charAt(0)?.toUpperCase() ??
-                    profile?.email?.charAt(0)?.toUpperCase() ??
-                    "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {profile?.full_name ?? "User"}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {profile?.email ?? ""}
-                </p>
-              </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              side="top"
-              sideOffset={6}
-              className="min-w-56 bg-popover text-popover-foreground ring-border"
-            >
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href="/settings?tab=profile"
-                    onClick={onClose}
-                    className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-                  />
-                }
-              >
-                <User className="size-4" />
-                Perfil
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href="/settings?tab=whatsapp"
-                    onClick={onClose}
-                    className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-                  />
-                }
-              >
-                <Settings className="size-4" />
-                Configurações
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-border" />
-              <DropdownMenuItem
-                onClick={signOut}
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-              >
-                <LogOut className="size-4" />
-                Sair
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {(() => {
+            const displayName =
+              profile?.full_name?.trim() ||
+              (profile?.email ? profile.email.split("@")[0] : "Usuário");
+            const initial = displayName.charAt(0).toUpperCase() || "U";
+
+            return (
+              <DropdownMenu>
+                <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
+                  <Avatar className="size-8 shrink-0">
+                    {profile?.avatar_url ? (
+                      <AvatarImage
+                        src={profile.avatar_url}
+                        alt={displayName}
+                      />
+                    ) : null}
+                    <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                      {initial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {displayName}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {profile?.email ?? ""}
+                    </p>
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  side="top"
+                  sideOffset={6}
+                  className="min-w-56 bg-popover text-popover-foreground ring-border"
+                >
+                  <DropdownMenuItem
+                    onClick={() => {
+                      router.push("/settings?tab=profile");
+                      onClose?.();
+                    }}
+                    className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground flex items-center gap-2"
+                  >
+                    <User className="size-4" />
+                    Perfil
+                  </DropdownMenuItem>
+                  {canEditSettings && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        router.push("/settings");
+                        onClose?.();
+                      }}
+                      className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground flex items-center gap-2"
+                    >
+                      <Settings className="size-4" />
+                      Configurações
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator className="bg-border" />
+                  <DropdownMenuItem
+                    onClick={signOut}
+                    className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground flex items-center gap-2"
+                  >
+                    <LogOut className="size-4" />
+                    Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          })()}
         </div>
       </aside>
     </>

@@ -33,21 +33,23 @@ export default function SettingsPage() {
   const canEditSettings = useCan('edit-settings');
   const { mode } = useTheme();
 
-  useEffect(() => {
-    if (!profileLoading && !canEditSettings) {
-      router.replace('/inbox');
-    }
-  }, [canEditSettings, profileLoading, router]);
+  const section = resolveSection(searchParams.get('tab'));
+  const isPersonalSection =
+    section === 'profile' || section === 'security' || section === 'appearance';
 
-  if (profileLoading || !canEditSettings) {
+  useEffect(() => {
+    if (!profileLoading && !canEditSettings && !isPersonalSection) {
+      router.replace('/settings?tab=profile');
+    }
+  }, [canEditSettings, isPersonalSection, profileLoading, router]);
+
+  if (profileLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-sm text-muted-foreground">Acesso restrito a administradores.</p>
+        <p className="text-sm text-muted-foreground">Carregando configurações…</p>
       </div>
     );
   }
-
-  const section = resolveSection(searchParams.get('tab'));
 
   const go = (next: SettingsSection) => {
     const params = new URLSearchParams(searchParams.toString());

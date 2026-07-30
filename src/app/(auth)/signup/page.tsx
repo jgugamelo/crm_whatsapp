@@ -60,10 +60,10 @@ function SignupPageInner() {
 
     setLoading(true);
 
-    // If we have an invite token, point Supabase's verification
-    // email back at the join page so the user can accept after
-    // verifying. Without a token, Supabase uses its default
-    // redirect (the app root).
+    if (inviteToken && typeof window !== "undefined") {
+      localStorage.setItem("wacrm_pending_invite", inviteToken);
+    }
+
     const emailRedirectTo = inviteToken
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
