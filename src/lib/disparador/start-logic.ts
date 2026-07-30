@@ -197,10 +197,14 @@ export async function startCampaignLogic(campaignId: string) {
   }
 
   // 5. Update campaign status to 'em_execucao' (In execution)
-  await supabaseAdmin
+  const { error: statusErr } = await supabaseAdmin
     .from("campaigns")
-    .update({ status: "em_execucao", agendamento: now })
+    .update({ status: "em_execucao", updated_at: now })
     .eq("id", campaignId);
+
+  if (statusErr) {
+    console.error("[startCampaignLogic] Error updating campaign status:", statusErr);
+  }
 
   // Update Metrics
   await supabaseAdmin
@@ -212,6 +216,9 @@ export async function startCampaignLogic(campaignId: string) {
       },
       { onConflict: "campaign_id" }
     );
+
+  // Trigger worker check immediately
+  ensureQueueWorkerRunning();
 
   return { success: true, enqueued };
 }

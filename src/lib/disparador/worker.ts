@@ -119,15 +119,30 @@ export function ensureQueueWorkerRunning() {
             continue;
           }
 
-          // Fetch WAHA config directly using session_id
-          const { data: config } = await supabaseAdmin
-            .from("whatsapp_config")
-            .select("*")
-            .eq("id", item.session_id)
-            .maybeSingle();
+          // Fetch WAHA config using id or waha_session name
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.session_id);
+          let config: any = null;
 
-          if (!config || config.provider !== "waha") {
-            throw new Error("WhatsApp WAHA connection is not active or configured for this session");
+          if (isUuid) {
+            const { data } = await supabaseAdmin
+              .from("whatsapp_config")
+              .select("*")
+              .eq("id", item.session_id)
+              .maybeSingle();
+            config = data;
+          }
+
+          if (!config) {
+            const { data } = await supabaseAdmin
+              .from("whatsapp_config")
+              .select("*")
+              .eq("waha_session", item.session_id)
+              .maybeSingle();
+            config = data;
+          }
+
+          if (!config || (config.provider && config.provider !== "waha")) {
+            throw new Error("Conexão do WhatsApp WAHA não encontrada ou inativa para esta sessão");
           }
 
           // Build decrypted config
@@ -273,11 +288,15 @@ export function ensureQueueWorkerRunning() {
             waha_message_id: wahaMessageId,
           });
 
-          // Increment campaign statistics
-          await supabaseAdmin.rpc("increment_campaign_metric", {
-            p_campaign_id: item.campaign_id,
-            p_field: "total_enviados",
-          });
+          // Increment campaign statistics safely
+          try {
+            await supabaseAdmin.rpc("increment_campaign_metric", {
+              p_campaign_id: item.campaign_id,
+              p_field: "total_enviados",
+            });
+          } catch (metricErr) {
+            // Ignore if RPC doesn't exist
+          }
         } catch (itemErr: any) {
           console.error(`[Queue Worker] Error processing item for campaign ${campaign.id}:`, itemErr);
           if (currentItem) {
