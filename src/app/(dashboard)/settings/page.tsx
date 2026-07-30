@@ -43,20 +43,6 @@ export default function SettingsPage() {
     }
   }, [canEditSettings, isPersonalSection, profileLoading, router]);
 
-  if (profileLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-sm text-muted-foreground">Carregando configurações…</p>
-      </div>
-    );
-  }
-
-  const go = (next: SettingsSection) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('tab', next);
-    router.replace(`/settings?${params.toString()}`, { scroll: false });
-  };
-
   // Cheap, fetch-free rail hints. The Overview landing carries the
   // full live status/counts; the rail just surfaces the two that are
   // already in context.
@@ -72,6 +58,20 @@ export default function SettingsPage() {
     }),
     [mode, defaultCurrency],
   );
+
+  if (profileLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-sm text-muted-foreground">Carregando configurações…</p>
+      </div>
+    );
+  }
+
+  const go = (next: SettingsSection) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', next);
+    router.replace(`/settings?${params.toString()}`, { scroll: false });
+  };
 
   const renderActiveSection = () => {
     switch (section) {

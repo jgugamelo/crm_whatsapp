@@ -300,19 +300,31 @@ export function ConversationList({
 
           {configs.length > 0 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[130px]">
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[140px]">
+                {selectedLine !== "all" && (
+                  <span
+                    className={cn(
+                      "size-2 rounded-full shrink-0",
+                      configs.find(c => c.waha_session === selectedLine)?.connected
+                        ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]"
+                        : "bg-rose-500"
+                    )}
+                  />
+                )}
+                <span className="truncate">
                   Linha: {selectedLine === "all" ? "Todas" : (configs.find(c => c.waha_session === selectedLine)?.phone_info?.display_phone_number || selectedLine)}
-                  <ChevronDown className="h-3 w-3" />
+                </span>
+                <ChevronDown className="h-3 w-3 shrink-0" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="start"
-                className="border-border bg-popover"
+                className="border-border bg-popover min-w-[200px]"
               >
                 <DropdownMenuItem
                   onClick={() => setSelectedLine("all")}
                   className={cn(
-                    "text-sm",
-                    selectedLine === "all" ? "text-primary font-semibold" : "text-popover-foreground"
+                    "text-xs cursor-pointer py-2",
+                    selectedLine === "all" ? "text-primary font-semibold bg-primary/10" : "text-popover-foreground"
                   )}
                 >
                   Todas as Linhas
@@ -322,11 +334,31 @@ export function ConversationList({
                     key={c.id}
                     onClick={() => setSelectedLine(c.waha_session)}
                     className={cn(
-                      "text-sm",
-                      selectedLine === c.waha_session ? "text-primary font-semibold" : "text-popover-foreground"
+                      "text-xs cursor-pointer flex items-center justify-between gap-3 py-2",
+                      selectedLine === c.waha_session ? "text-primary font-semibold bg-primary/10" : "text-popover-foreground"
                     )}
                   >
-                    {c.phone_info?.display_phone_number || c.waha_session}
+                    <span className="flex items-center gap-2 truncate">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full shrink-0",
+                          c.connected
+                            ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]"
+                            : "bg-rose-500"
+                        )}
+                      />
+                      <span className="truncate">{c.phone_info?.display_phone_number || c.waha_session}</span>
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[9px] uppercase px-1.5 py-0.5 rounded font-mono shrink-0",
+                        c.connected
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                          : "bg-rose-500/15 text-rose-400 border border-rose-500/20"
+                      )}
+                    >
+                      {c.connected ? "Ativa" : "Inativa"}
+                    </span>
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>

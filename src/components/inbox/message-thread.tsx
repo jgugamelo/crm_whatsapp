@@ -1067,7 +1067,20 @@ export function MessageThread({
           {/* WhatsApp Line dropdown */}
           {configs.length > 1 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-1.5 sm:px-2 text-[11px] sm:text-xs rounded-md hover:bg-muted text-primary font-medium truncate max-w-[140px] sm:max-w-none">
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1.5 px-1.5 sm:px-2 text-[11px] sm:text-xs rounded-md hover:bg-muted text-primary font-medium truncate max-w-[150px] sm:max-w-none border border-border/40">
+                <span
+                  className={cn(
+                    "size-2 rounded-full shrink-0",
+                    configs.find(c => c.waha_session === conversation.waha_session)?.connected
+                      ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]"
+                      : "bg-rose-500"
+                  )}
+                  title={
+                    configs.find(c => c.waha_session === conversation.waha_session)?.connected
+                      ? "Linha Conectada / Ativa"
+                      : "Linha Desconectada / Inativa"
+                  }
+                />
                 <span className="truncate">
                   Linha: {configs.find(c => c.waha_session === conversation.waha_session)?.phone_info?.display_phone_number || conversation.waha_session || "Selecione..."}
                 </span>
@@ -1075,18 +1088,38 @@ export function MessageThread({
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="border-border bg-popover"
+                className="border-border bg-popover min-w-[200px]"
               >
                 {configs.map((c) => (
                   <DropdownMenuItem
                     key={c.id}
                     onClick={() => handleLineChange(c.waha_session)}
                     className={cn(
-                      "text-sm cursor-pointer",
-                      conversation.waha_session === c.waha_session ? "text-primary font-medium" : "text-foreground"
+                      "text-xs cursor-pointer flex items-center justify-between gap-3 py-2",
+                      conversation.waha_session === c.waha_session ? "text-primary font-medium bg-primary/10" : "text-foreground"
                     )}
                   >
-                    {c.phone_info?.display_phone_number || c.waha_session}
+                    <span className="flex items-center gap-2 truncate">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full shrink-0",
+                          c.connected
+                            ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]"
+                            : "bg-rose-500"
+                        )}
+                      />
+                      <span className="truncate">{c.phone_info?.display_phone_number || c.waha_session}</span>
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[9px] uppercase px-1.5 py-0.5 rounded font-mono shrink-0",
+                        c.connected
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                          : "bg-rose-500/15 text-rose-400 border border-rose-500/20"
+                      )}
+                    >
+                      {c.connected ? "Ativa" : "Inativa"}
+                    </span>
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
