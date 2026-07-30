@@ -927,18 +927,17 @@ export function MessageThread({
     <div className={cn("flex min-w-0 flex-1 flex-col", DOODLE_BG_CLASSES)}>
       {/* Header — solid card surface sits on top of the doodle so the
           name/avatar/dropdowns stay legible. */}
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-3 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          {/* Back-to-list button — mobile only. Hidden on lg+ where the
-              conversation list is always visible next to the thread. */}
+      <div className="flex items-center justify-between gap-3 border-b border-border bg-card px-3 py-2.5 sm:px-4 min-h-[56px] overflow-hidden">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3 overflow-hidden">
+          {/* Back-to-list button — mobile only */}
           {onBack && (
             <button
               type="button"
               onClick={onBack}
               aria-label="Voltar às conversas"
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4" />
             </button>
           )}
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground overflow-hidden">
@@ -953,40 +952,48 @@ export function MessageThread({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+            <h2 className="truncate text-sm font-semibold text-foreground leading-tight">
+              {displayName}
+            </h2>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground leading-none">
+              <span className="truncate">{contact.phone}</span>
               {conversation.sentiment && conversation.sentiment !== "unknown" && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border select-none whitespace-nowrap shrink-0 transition-all duration-200",
-                    conversation.sentiment === "positive" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400",
-                    conversation.sentiment === "negative" && "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400",
-                    conversation.sentiment === "neutral" && "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400",
-                    conversation.sentiment === "mixed" && "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
-                  )}
-                  title={`Sentimento: ${conversation.sentiment}`}
-                >
-                  {conversation.sentiment === "positive" && "😊 Positivo"}
-                  {conversation.sentiment === "negative" && "😡 Negativo"}
-                  {conversation.sentiment === "neutral" && "😐 Neutro"}
-                  {conversation.sentiment === "mixed" && "🤔 Misto"}
-                </span>
+                <>
+                  <span className="text-muted-foreground/50 select-none">•</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border select-none whitespace-nowrap shrink-0 leading-none",
+                      conversation.sentiment === "positive" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400",
+                      conversation.sentiment === "negative" && "bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400",
+                      conversation.sentiment === "neutral" && "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400",
+                      conversation.sentiment === "mixed" && "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400"
+                    )}
+                    title={`Sentimento: ${conversation.sentiment}`}
+                  >
+                    {conversation.sentiment === "positive" && "😊 Positivo"}
+                    {conversation.sentiment === "negative" && "😡 Negativo"}
+                    {conversation.sentiment === "neutral" && "😐 Neutro"}
+                    {conversation.sentiment === "mixed" && "🤔 Misto"}
+                  </span>
+                </>
+              )}
+              {sessionInfo && (
+                <>
+                  <span className="text-muted-foreground/50 select-none">•</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 text-[11px] font-medium whitespace-nowrap shrink-0 leading-none",
+                      sessionInfo.expired ? "text-red-400" : "text-primary"
+                    )}
+                    title="Tempo restante da janela de 24h"
+                  >
+                    <Clock className="h-3 w-3" />
+                    {sessionInfo.remaining}
+                  </span>
+                </>
               )}
             </div>
-            <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
           </div>
-          {/* Session timer badge — hidden on the narrowest phones so
-              the name + back arrow keep their room. */}
-          <Badge
-            variant="outline"
-            className={cn(
-              "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2 shrink-0",
-              sessionInfo.expired ? "text-red-400" : "text-primary"
-            )}
-          >
-            <Clock className="h-3 w-3" />
-            {sessionInfo.remaining}
-          </Badge>
         </div>
 
         <div className="flex items-center justify-end gap-1.5 shrink-0">
