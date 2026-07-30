@@ -1,0 +1,217 @@
+import { createClient } from "@supabase/supabase-js";
+import { ensureQueueWorkerRunning } from "@/lib/disparador/worker";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  { db: { schema: "wacrm" } }
+);
+
+export async function startCampaignLogic(campaignId: string) {
+  ensureQueueWorkerRunning();
+  const now = new Date().toISOString();
+
+  // 1. Fetch Campaign configuration
+  const { data: campaign, error: campaignError } = await supabaseAdmin
+    .from("campaigns")
+    .select("*")
+    .eq("id", campaignId)
+    .single();
+
+  if (campaignError || !campaign) {
+    throw new Error("Campanha não encontrada no banco de dados.");
+  }
+
+  const mensagens = Array.isArray(campaign.mensagens) ? campaign.mensagens : [];
+  if (mensagens.length === 0) {
+    throw new Error("Campanha sem mensagens configuradas.");
+  }
+
+  const sessionIds = Array.isArray(campaign.session_ids) ? campaign.session_ids : [];
+  if (sessionIds.length === 0) {
+    throw new Error("Campanha sem sessões de WhatsApp selecionadas.");
+  }
+
+  // 2. Remove previously scheduled/pending items to prevent duplication
+  await supabaseAdmin
+    .from("disp_message_queue")
+    .delete()
+    .eq("campaign_id", campaignId)
+    .in("status", ["pendente", "agendado", "erro"]);
+
+  // 3. Load active contacts belonging to this account
+  const { data: allContacts, error: contactsError } = await supabaseAdmin
+    .from("contacts")
+    .select("id, name, phone")
+    .eq("account_id", campaign.account_id);
+
+  if (contactsError) {
+    throw new Error(`Erro ao carregar contatos do CRM: ${contactsError.message}`);
+  }
+
+  if (!allContacts || allContacts.length === 0) {
+    throw new Error("Nenhum contato ativo encontrado no CRM para este disparo.");
+  }
+
+  // Load contact tags relation
+  const { data: tagsList } = await supabaseAdmin
+    .from("contact_tags")
+    .select("contact_id, tags:tag_id(name)");
+
+  const tagsMap: Record<string, string[]> = {};
+  if (tagsList) {
+    for (const item of tagsList) {
+      if (!item.contact_id) continue;
+      const tagName = (item.tags as any)?.name;
+      if (tagName) {
+        if (!tagsMap[item.contact_id]) {
+          tagsMap[item.contact_id] = [];
+        }
+        tagsMap[item.contact_id].push(tagName);
+      }
+    }
+  }
+
+  // Map tags to contacts in memory
+  const contactsWithTags = allContacts.map((c) => ({
+    ...c,
+    tags: tagsMap[c.id] || [],
+  }));
+
+  // Pipeline Stage filtering
+  const stageIds = Array.isArray(campaign.stage_ids) ? campaign.stage_ids : [];
+  const pipelineId = campaign.pipeline_id;
+
+  let dealContactIdsSet: Set<string> | null = null;
+  if (stageIds.length > 0 || pipelineId) {
+    let dealsQuery = supabaseAdmin
+      .from("deals")
+      .select("contact_id")
+      .eq("account_id", campaign.account_id);
+
+    if (stageIds.length > 0) {
+      dealsQuery = dealsQuery.in("stage_id", stageIds);
+    } else if (pipelineId) {
+      dealsQuery = dealsQuery.eq("pipeline_id", pipelineId);
+    }
+
+    const { data: dealsList, error: dealsError } = await dealsQuery;
+    if (dealsError) {
+      throw new Error(`Erro ao carregar oportunidades do funil: ${dealsError.message}`);
+    }
+
+    dealContactIdsSet = new Set((dealsList ?? []).map((d) => d.contact_id).filter(Boolean));
+  }
+
+  // Filter contacts by tag
+  const tagsFiltro = Array.isArray(campaign.tags_filtro) ? campaign.tags_filtro : [];
+  let contacts = contactsWithTags;
+
+  if (tagsFiltro.length > 0) {
+    contacts = contacts.filter((c) => {
+      const contactTags = Array.isArray(c.tags) ? c.tags : [];
+      return tagsFiltro.some((t: string) => contactTags.includes(t));
+    });
+  }
+
+  if (dealContactIdsSet !== null) {
+    contacts = contacts.filter((c) => dealContactIdsSet!.has(c.id));
+  }
+
+  if (contacts.length === 0) {
+    throw new Error("Nenhum contato encontrado com os filtros de tags e funil selecionados.");
+  }
+
+  // Fetch Blacklist to skip (filtered by account)
+  const { data: blacklist } = await supabaseAdmin
+    .from("blacklist")
+    .select("telefone")
+    .eq("account_id", campaign.account_id);
+  const blacklistSet = new Set((blacklist ?? []).map((b) => b.telefone));
+
+  // 4. Scheduling queue generation loop
+  const minDelay = (campaign.intervalo_min || 30) * 1000;
+  const maxDelay = (campaign.intervalo_max || 60) * 1000;
+  const intraDelay = 3000; // 3 seconds between sequential messages for the same contact
+
+  let contactDelay = 0;
+  let enqueued = 0;
+  const queueRows = [];
+
+  for (let i = 0; i < contacts.length; i++) {
+    const contact = contacts[i];
+
+    // Skip if phone is blacklisted
+    if (contact.phone && blacklistSet.has(contact.phone)) continue;
+
+    // Select random session ID from campaign configurations
+    const sessionId = sessionIds[Math.floor(Math.random() * sessionIds.length)];
+
+    // Anti-spam pauses
+    if (i > 0 && i % 100 === 0) contactDelay += 60 * 60 * 1000; // 1 hour pause every 100 contacts
+    else if (i > 0 && i % 20 === 0) contactDelay += 10 * 60 * 1000; // 10 mins pause every 20 contacts
+
+    for (let j = 0; j < mensagens.length; j++) {
+      const msg = mensagens[j];
+      const msgDelay = contactDelay + j * intraDelay;
+      const scheduledAt = new Date(Date.now() + msgDelay).toISOString();
+
+      // Interpolate message variables
+      const rawText = msg.conteudo || msg.prompt || "";
+      const firstName = (contact.name || "Cliente").split(" ")[0];
+      const interpolatedText = rawText
+        .replace(/{nome}/g, contact.name || "Cliente")
+        .replace(/{name}/g, contact.name || "Cliente")
+        .replace(/{primeiro_nome}/g, firstName)
+        .replace(/{telefone}/g, contact.phone || "")
+        .replace(/{phone}/g, contact.phone || "");
+
+      queueRows.push({
+        account_id: campaign.account_id,
+        campaign_id: campaignId,
+        contact_id: contact.id,
+        session_id: sessionId,
+        mensagem_final: interpolatedText,
+        status: "agendado",
+        tipo: msg.tipo || "texto",
+        media_url: msg.url || null,
+        scheduled_at: scheduledAt,
+      });
+      enqueued++;
+    }
+
+    // Increment delay for the next contact
+    contactDelay += (mensagens.length - 1) * intraDelay + minDelay + Math.random() * (maxDelay - minDelay);
+  }
+
+  if (queueRows.length > 0) {
+    // Chunk insertions to prevent payload size limits
+    const chunkSize = 500;
+    for (let k = 0; k < queueRows.length; k += chunkSize) {
+      const chunk = queueRows.slice(k, k + chunkSize);
+      const { error: insertError } = await supabaseAdmin
+        .from("disp_message_queue")
+        .insert(chunk);
+      if (insertError) throw insertError;
+    }
+  }
+
+  // 5. Update campaign status to 'em_execucao' (In execution)
+  await supabaseAdmin
+    .from("campaigns")
+    .update({ status: "em_execucao", agendamento: now })
+    .eq("id", campaignId);
+
+  // Update Metrics
+  await supabaseAdmin
+    .from("campaign_metrics")
+    .upsert(
+      {
+        campaign_id: campaignId,
+        total_contatos: contacts.length,
+      },
+      { onConflict: "campaign_id" }
+    );
+
+  return { success: true, enqueued };
+}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { startCampaignLogic } from "@/lib/disparador/start-logic";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -108,16 +109,15 @@ export async function POST(request: Request) {
 
     const newCampaign = createdRows?.[0];
 
-    // 2. If immediate start was requested, trigger the start route internally
+    // 2. If immediate start was requested, run start logic directly in-process
+    let startMessage = "";
     if (iniciar_imediatamente && newCampaign?.id) {
       try {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        await fetch(`${appUrl}/api/disparador/campaigns/${newCampaign.id}/start`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (startErr) {
-        console.warn("[POST /api/disparador/campaigns] Start trigger failed:", startErr);
+        const result = await startCampaignLogic(newCampaign.id);
+        startMessage = ` e ${result.enqueued} mensagens agendadas na fila! 🚀`;
+      } catch (startErr: any) {
+        console.warn("[POST /api/disparador/campaigns] Start logic warning:", startErr);
+        startMessage = ` (Campanha criada, mas avisou: ${startErr.message || "Erro ao iniciar da fila"})`;
       }
     }
 
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
       ok: true,
       campaign: newCampaign,
       message: iniciar_imediatamente
-        ? "Campanha criada e disparos iniciados com sucesso! 🚀"
+        ? `Campanha criada${startMessage}`
         : "Campanha criada como rascunho com sucesso!",
     });
   } catch (err: any) {
