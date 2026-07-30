@@ -24,7 +24,11 @@ const pageTitles: Record<string, string> = {
   "/contacts": "Contatos",
   "/pipelines": "Funis",
   "/broadcasts": "Transmissões",
+  "/disparador": "Disparador de Campanhas",
   "/automations": "Automações",
+  "/flows": "Fluxos de Automação",
+  "/lead-extractor": "Extrator de Leads",
+  "/ajuda": "Central de Ajuda",
   "/settings": "Configurações",
 };
 

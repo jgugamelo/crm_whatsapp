@@ -62,7 +62,7 @@ export default function SettingsPage() {
   // already in context.
   const hints: Partial<Record<SettingsSection, ReactNode>> = useMemo(
     () => ({
-      appearance: mode.charAt(0).toUpperCase() + mode.slice(1),
+      appearance: mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : 'Light',
       deals: defaultCurrency,
       channels: (
         <span className="bg-primary/15 text-primary border border-primary/20 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider scale-90">
@@ -73,21 +73,24 @@ export default function SettingsPage() {
     [mode, defaultCurrency],
   );
 
-  const panel: Record<SettingsSection, ReactNode> = {
-    overview: <SettingsOverview onSelect={go} />,
-    profile: <ProfileForm />,
-    security: <SecurityPanel />,
-    appearance: <AppearancePanel />,
-    branding: <BrandingSettings />,
-    quick_replies: <QuickRepliesSettings />,
-    whatsapp: <WhatsAppConfig />,
-    channels: <ChannelsSettings />,
-    templates: <TemplateManager />,
-    fields: <FieldsAndTagsPanel />,
-    deals: <DealsSettings />,
-    members: <MembersTab />,
-    api: <ApiKeysSettings />,
-    ai: <AiAgentSettings />,
+  const renderActiveSection = () => {
+    switch (section) {
+      case 'overview': return <SettingsOverview onSelect={go} />;
+      case 'profile': return <ProfileForm />;
+      case 'security': return <SecurityPanel />;
+      case 'appearance': return <AppearancePanel />;
+      case 'branding': return <BrandingSettings />;
+      case 'quick_replies': return <QuickRepliesSettings />;
+      case 'whatsapp': return <WhatsAppConfig />;
+      case 'channels': return <ChannelsSettings />;
+      case 'templates': return <TemplateManager />;
+      case 'fields': return <FieldsAndTagsPanel />;
+      case 'deals': return <DealsSettings />;
+      case 'members': return <MembersTab />;
+      case 'api': return <ApiKeysSettings />;
+      case 'ai': return <AiAgentSettings />;
+      default: return <ProfileForm />;
+    }
   };
 
   return (
@@ -104,7 +107,7 @@ export default function SettingsPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
         <SettingsRail active={section} onSelect={go} hints={hints} />
-        <div className="min-w-0">{panel[section]}</div>
+        <div className="min-w-0">{renderActiveSection()}</div>
       </div>
     </div>
   );

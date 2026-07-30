@@ -128,9 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Shared across init, auth-state-change listener, and the exposed
   // refreshProfile() callback. Reads the current session's user id and
   // pulls the matching profile row along with its account summary.
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string, isSilent = false) => {
     const supabase = createClient();
-    setProfileLoading(true);
+    if (!isSilent) setProfileLoading(true);
     try {
       // Check for pending invite in localStorage to auto-redeem
       if (typeof window !== "undefined") {
@@ -294,13 +294,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       const currentUser = session?.user ?? null;
       setUser(currentUser);
 
       if (currentUser) {
-        fetchProfile(currentUser.id);
+        // Silent update on background token refresh to prevent visual UI flickering
+        fetchProfile(currentUser.id, event === "TOKEN_REFRESHED");
       } else {
         setProfile(null);
         setAccount(null);
