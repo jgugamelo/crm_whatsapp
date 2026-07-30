@@ -59,11 +59,26 @@ function LoginPageInner() {
       return;
     }
 
-    if (inviteToken) {
-      router.push(`/join/${encodeURIComponent(inviteToken)}`);
-    } else {
-      router.push("/dashboard");
+    const effectiveInvite =
+      inviteToken ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("wacrm_pending_invite")
+        : null);
+
+    if (effectiveInvite) {
+      try {
+        await fetch(`/api/invitations/${encodeURIComponent(effectiveInvite)}/redeem`, {
+          method: "POST",
+        });
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("wacrm_pending_invite");
+        }
+      } catch (err) {
+        console.error("[login] redeem error:", err);
+      }
     }
+
+    window.location.href = "/dashboard";
   };
 
   return (

@@ -68,7 +68,7 @@ function SignupPageInner() {
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
 
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -82,6 +82,21 @@ function SignupPageInner() {
     if (error) {
       setError(error.message);
       setLoading(false);
+      return;
+    }
+
+    if (inviteToken && signUpData.session) {
+      try {
+        await fetch(`/api/invitations/${encodeURIComponent(inviteToken)}/redeem`, {
+          method: "POST",
+        });
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("wacrm_pending_invite");
+        }
+      } catch (err) {
+        console.error("[signup] redeem error:", err);
+      }
+      window.location.href = "/dashboard";
       return;
     }
 
