@@ -285,17 +285,24 @@ export function AiAgentSettings() {
         </Card>
 
         {/* Integration Card */}
-        <Card className={!enabled ? "opacity-60" : ""}>
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-foreground">
               <Key className="size-4 text-primary" />
               Integração e Chave de API
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Escolha seu provedor e insira sua chave de API para habilitar o serviço.
+              Escolha seu provedor e insira sua chave de API para habilitar todos os recursos de inteligência artificial do sistema.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary">
+              <Sparkles className="size-4 shrink-0 text-primary" />
+              <span>
+                <strong>Chave Global de IA:</strong> A chave de API salva aqui é utilizada por <strong>todos os recursos de IA</strong> do CRM (como a <strong>Análise de Sentimento no Inbox</strong> e a <strong>reescrita de mensagens com IA no Disparador</strong>), mesmo que o Status do Agente (resposta automática) esteja desativado.
+              </span>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Provedor de IA</Label>

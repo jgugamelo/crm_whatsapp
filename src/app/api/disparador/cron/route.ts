@@ -134,27 +134,37 @@ export async function POST(request: Request) {
     const tipo = item.tipo || "texto";
     let messageText = item.mensagem_final;
 
-    if (tipo === "ia" && process.env.OPENAI_API_KEY) {
-      try {
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "Você é um assistente de vendas para WhatsApp. Gere uma mensagem natural, sem parecer spam. Responda APENAS com a mensagem, sem explicações.",
-            },
-            {
-              role: "user",
-              content: `Contato: nome=${item.contacts?.nome || ""}. Prompt: ${messageText}`,
-            },
-          ],
-          max_tokens: 500,
-        });
-        messageText = completion.choices[0]?.message?.content || messageText;
-      } catch (aiErr) {
-        console.warn("AI generation failed, fallback to prompt text:", aiErr);
+    if (tipo === "ia") {
+      const { data: aiConfig } = await supabaseAdmin
+        .from("ai_config")
+        .select("api_key, api_provider")
+        .eq("account_id", accountId)
+        .maybeSingle();
+
+      const activeApiKey = aiConfig?.api_key?.trim() || process.env.OPENAI_API_KEY;
+
+      if (activeApiKey) {
+        try {
+          const openai = new OpenAI({ apiKey: activeApiKey });
+          const completion = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Você é um assistente de vendas para WhatsApp. Gere uma mensagem natural, sem parecer spam. Responda APENAS com a mensagem, sem explicações.",
+              },
+              {
+                role: "user",
+                content: `Contato: nome=${item.contacts?.nome || ""}. Prompt: ${messageText}`,
+              },
+            ],
+            max_tokens: 500,
+          });
+          messageText = completion.choices[0]?.message?.content || messageText;
+        } catch (aiErr) {
+          console.warn("AI generation failed, fallback to prompt text:", aiErr);
+        }
       }
     }
 
