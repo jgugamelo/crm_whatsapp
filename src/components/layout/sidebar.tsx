@@ -51,7 +51,7 @@ const ROLE_CHIP: Record<
   },
   agent: {
     icon: UserCog,
-    label: "Agente",
+    label: "Consultor",
     className:
       "border-border bg-muted text-foreground",
   },
@@ -79,10 +79,6 @@ interface NavItem {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  /**
-   * When true, the nav row renders a small "Beta" chip after the label.
-   * Purely informational — doesn't affect routing or access.
-   */
   beta?: boolean;
 }
 
@@ -103,7 +99,6 @@ const bottomNavItems = [
 ];
 
 interface SidebarProps {
-  /** Controlled on mobile by the Header's hamburger button. Ignored on lg+. */
   open?: boolean;
   onClose?: () => void;
 }
@@ -113,6 +108,16 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const searchParams = useSearchParams();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
+
+  const canEditSettings = accountRole === "owner" || accountRole === "admin";
+
+  const filteredNavItems = canEditSettings
+    ? navItems
+    : navItems.filter((i) => !i.href.startsWith("/settings"));
+
+  const filteredBottomNavItems = canEditSettings
+    ? bottomNavItems
+    : bottomNavItems.filter((i) => !i.href.startsWith("/settings"));
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -210,7 +215,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const isActive =
                 item.href.includes("?tab=ai")
                   ? pathname === "/settings" && searchParams.get("tab") === "ai"
@@ -227,7 +232,6 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                   <Link
                     href={item.href}
                     className={cn(
-                      // Taller on mobile so fingers can hit the row reliably (≥44px).
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
                       isActive
                         ? "bg-primary/10 text-primary"
@@ -262,7 +266,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           <div className="my-4 border-t border-border" />
 
           <ul className="flex flex-col gap-1">
-            {bottomNavItems.map((item) => {
+            {filteredBottomNavItems.map((item) => {
               const isActive =
                 item.href === "/settings"
                   ? pathname.startsWith(item.href) && searchParams.get("tab") !== "ai"

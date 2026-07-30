@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { parseContactCsv, parseTagCell } from './parse-contact-csv';
+
+beforeEach(() => {
+  process.env.DEFAULT_COUNTRY_CODE = '1';
+});
 
 describe('parseTagCell', () => {
   it('splits comma-separated tags and trims whitespace', () => {

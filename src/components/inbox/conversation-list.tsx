@@ -41,6 +41,8 @@ const FILTER_OPTIONS: { label: string; value: InboxFilter }[] = [
   { label: "Fechados", value: "closed" },
 ];
 
+import { useAuth } from "@/hooks/use-auth";
+
 export function ConversationList({
   activeConversationId,
   onSelect,
@@ -48,6 +50,9 @@ export function ConversationList({
   onConversationsLoaded,
   resyncToken = 0,
 }: ConversationListProps) {
+  const { user, accountRole } = useAuth();
+  const isConsultant = accountRole === "agent" || accountRole === "viewer";
+
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [selectedLine, setSelectedLine] = useState<string>("all");
@@ -126,10 +131,16 @@ export function ConversationList({
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("conversations")
         .select("*, contact:contacts(*, contact_tags(tag:tags(id, name, color)), deals(id, stage_id, stage:pipeline_stages(id, name, pipeline:pipelines(id, name))))")
         .order("last_message_at", { ascending: false });
+
+      if (isConsultant && user?.id) {
+        query = query.or(`assigned_agent_id.is.null,assigned_agent_id.eq.${user.id}`);
+      }
+
+      const { data, error } = await query;
 
       if (cancelled) return;
 
@@ -146,7 +157,7 @@ export function ConversationList({
     return () => {
       cancelled = true;
     };
-  }, [resyncToken]);
+  }, [resyncToken, isConsultant, user?.id]);
 
   const handleTogglePin = useCallback(async (e: React.MouseEvent, conv: Conversation) => {
     e.stopPropagation();
@@ -208,6 +219,12 @@ export function ConversationList({
       });
     }
 
+    if (isConsultant && user?.id) {
+      result = result.filter(
+        (c) => !c.assigned_agent_id || c.assigned_agent_id === user.id
+      );
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((c) => {
@@ -219,7 +236,7 @@ export function ConversationList({
     }
 
     return result;
-  }, [conversations, filter, selectedLine, selectedTag, selectedStage, search]);
+  }, [conversations, filter, selectedLine, selectedTag, selectedStage, search, isConsultant, user?.id]);
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

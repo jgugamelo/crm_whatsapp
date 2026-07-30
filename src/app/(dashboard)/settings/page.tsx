@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { useCan } from '@/hooks/use-can';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -28,13 +29,24 @@ import {
 export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { defaultCurrency } = useAuth();
+  const { defaultCurrency, profileLoading } = useAuth();
+  const canEditSettings = useCan('edit-settings');
   const { mode } = useTheme();
 
-  // The URL (`?tab=`) is the single source of truth for the active
-  // section — deep-linkable, and it keeps the existing links in the
-  // app sidebar/header working. Legacy tab values (tags, custom-fields)
-  // resolve onto their new home; unknown/empty → the Overview landing.
+  useEffect(() => {
+    if (!profileLoading && !canEditSettings) {
+      router.replace('/inbox');
+    }
+  }, [canEditSettings, profileLoading, router]);
+
+  if (profileLoading || !canEditSettings) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-sm text-muted-foreground">Acesso restrito a administradores.</p>
+      </div>
+    );
+  }
+
   const section = resolveSection(searchParams.get('tab'));
 
   const go = (next: SettingsSection) => {
