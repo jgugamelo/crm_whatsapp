@@ -4628,3 +4628,14 @@ CREATE POLICY disp_message_queue_update ON wacrm.disp_message_queue FOR UPDATE U
 CREATE POLICY disp_message_queue_delete ON wacrm.disp_message_queue FOR DELETE USING (wacrm.is_account_member(account_id, 'agent'));
 
 GRANT ALL ON ALL TABLES IN SCHEMA wacrm TO anon, authenticated, service_role;
+
+-- Migration 047: Create public views for campaigns and disp_message_queue
+CREATE SCHEMA IF NOT EXISTS wacrm;
+
+CREATE OR REPLACE VIEW public.campaigns AS SELECT * FROM wacrm.campaigns;
+CREATE OR REPLACE VIEW public.disp_message_queue AS SELECT * FROM wacrm.disp_message_queue;
+CREATE OR REPLACE VIEW public.campaign_metrics AS SELECT * FROM wacrm.campaign_metrics;
+
+GRANT ALL ON public.campaigns TO anon, authenticated, service_role;
+GRANT ALL ON public.disp_message_queue TO anon, authenticated, service_role;
+GRANT ALL ON public.campaign_metrics TO anon, authenticated, service_role;

@@ -54,57 +54,11 @@ export default function DisparadorDashboardPage() {
   const loadData = async () => {
     if (!accountId) return;
     try {
-      const supabase = createClient();
-
-      // Fetch last 15 queue logs with contact and campaign info for this account
-      const { data, error } = await supabase
-        .from("disp_message_queue")
-        .select(`
-          id,
-          campaign_id,
-          mensagem_final,
-          status,
-          scheduled_at,
-          sent_at,
-          erro,
-          contacts:contact_id ( name, phone ),
-          campaigns:campaign_id ( nome )
-        `)
-        .eq("account_id", accountId)
-        .order("scheduled_at", { ascending: false })
-        .limit(15);
-
-      if (!error && data) {
-        // Map contacts schema mapping
-        const mappedData: QueueLog[] = data.map((d: any) => ({
-          id: d.id,
-          campaign_id: d.campaign_id,
-          mensagem_final: d.mensagem_final,
-          status: d.status,
-          scheduled_at: d.scheduled_at,
-          sent_at: d.sent_at,
-          erro: d.erro,
-          contacts: d.contacts ? { nome: d.contacts.name, phone: d.contacts.phone } : undefined,
-          campaigns: d.campaigns ? { nome: d.campaigns.nome } : undefined,
-        }));
-        setQueue(mappedData);
-      }
-
-      // Fetch Queue Stats for this account
-      const { data: countData } = await supabase
-        .from("disp_message_queue")
-        .select("status")
-        .eq("account_id", accountId);
-
-      if (countData) {
-        const counts = { scheduled: 0, sending: 0, success: 0, failed: 0 };
-        countData.forEach((item) => {
-          if (item.status === "agendado") counts.scheduled++;
-          else if (item.status === "enviando") counts.sending++;
-          else if (item.status === "enviado") counts.success++;
-          else if (item.status === "erro") counts.failed++;
-        });
-        setStats(counts);
+      const res = await fetch("/api/disparador/queue");
+      if (res.ok) {
+        const data = await res.json();
+        setQueue(data.queue ?? []);
+        if (data.stats) setStats(data.stats);
       }
     } catch (err) {
       console.error("Failed to load queue dashboard stats:", err);

@@ -9,6 +9,46 @@ const supabaseAdmin = createClient(
   { db: { schema: "wacrm" } }
 );
 
+export async function GET(request: Request) {
+  try {
+    const supabaseUser = await createServerClient();
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabaseUser.auth.getUser();
+
+    if (userErr || !user) {
+      return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("account_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!profile?.account_id) {
+      return NextResponse.json({ campaigns: [] });
+    }
+
+    const { data: campaigns, error } = await supabaseAdmin
+      .from("campaigns")
+      .select("*")
+      .eq("account_id", profile.account_id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[GET /api/disparador/campaigns] Error:", error);
+      return NextResponse.json({ campaigns: [] });
+    }
+
+    return NextResponse.json({ campaigns: campaigns ?? [] });
+  } catch (err: any) {
+    console.error("[GET /api/disparador/campaigns] Exception:", err);
+    return NextResponse.json({ campaigns: [] });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabaseUser = await createServerClient();
@@ -117,7 +157,7 @@ export async function POST(request: Request) {
         startMessage = ` e ${result.enqueued} mensagens agendadas na fila! 🚀`;
       } catch (startErr: any) {
         console.warn("[POST /api/disparador/campaigns] Start logic warning:", startErr);
-        startMessage = ` (Campanha criada, mas avisou: ${startErr.message || "Erro ao iniciar da fila"})`;
+        startMessage = ` (Campanha criada, aviso de agendamento: ${startErr.message || "Fila não populada"})`;
       }
     }
 

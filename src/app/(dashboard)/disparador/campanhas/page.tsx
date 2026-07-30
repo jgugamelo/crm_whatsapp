@@ -138,13 +138,16 @@ export default function CampanhasPage() {
     try {
       const supabase = createClient();
 
-      // Load Campaigns
-      const { data: campaignList } = await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("account_id", accountId)
-        .order("created_at", { ascending: false });
-      setCampaigns(campaignList ?? []);
+      // Load Campaigns via API route (bypasses PostgREST schema 404)
+      try {
+        const cRes = await fetch("/api/disparador/campaigns");
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          setCampaigns(cData.campaigns ?? []);
+        }
+      } catch (cErr) {
+        console.error("Failed to fetch campaigns via API:", cErr);
+      }
 
       // Load Tags (filtered by user/account through RLS already, but we can load directly)
       const { data: tagList } = await supabase.from("tags").select("id, name, color").order("name");
@@ -222,9 +225,8 @@ export default function CampanhasPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja deletar esta campanha permanentemente?")) return;
     try {
-      const supabase = createClient();
-      const { error } = await supabase.from("campaigns").delete().eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/disparador/campaigns/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Erro ao deletar");
       toast.success("Campanha deletada.");
       loadData();
     } catch (err: any) {
