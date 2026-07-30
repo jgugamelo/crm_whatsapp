@@ -249,48 +249,33 @@ export default function CampanhasPage() {
     }
 
     try {
-      const supabase = createClient();
-      const campaignData = {
-        account_id: accountId,
-        created_by: user?.id,
-        nome,
-        descricao,
-        objetivo,
-        session_ids: selectedSessions,
-        tags_filtro: selectedTags,
-        pipeline_id: selectedPipelineId || null,
-        stage_ids: selectedStageIds,
-        mensagens,
-        intervalo_min: intervaloMin,
-        intervalo_max: intervaloMax,
-        janela_inicio: janelaInicio,
-        janela_fim: janelaFim,
-        status: "rascunho",
-      };
+      const res = await fetch("/api/disparador/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: accountId,
+          nome,
+          descricao,
+          objetivo,
+          session_ids: selectedSessions,
+          tags_filtro: selectedTags,
+          pipeline_id: selectedPipelineId || null,
+          stage_ids: selectedStageIds,
+          mensagens,
+          intervalo_min: intervaloMin,
+          intervalo_max: intervaloMax,
+          janela_inicio: janelaInicio,
+          janela_fim: janelaFim,
+          iniciar_imediatamente: iniciarImediatamente,
+        }),
+      });
 
-      const { data: createdRows, error } = await supabase
-        .from("campaigns")
-        .insert(campaignData)
-        .select("id");
-
-      if (error) throw error;
-      const createdId = createdRows?.[0]?.id;
-
-      if (iniciarImediatamente && createdId) {
-        try {
-          const res = await fetch(`/api/disparador/campaigns/${createdId}/start`, { method: "POST" });
-          if (res.ok) {
-            toast.success("Campanha criada e disparos iniciados! 🚀");
-          } else {
-            toast.success("Campanha criada com sucesso!");
-          }
-        } catch {
-          toast.success("Campanha criada com sucesso!");
-        }
-      } else {
-        toast.success("Campanha salva como rascunho!");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao criar campanha.");
       }
 
+      toast.success(data.message || "Campanha processada com sucesso!");
       setShowModal(false);
       resetForm();
       loadData();
