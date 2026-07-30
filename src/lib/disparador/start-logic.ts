@@ -129,6 +129,25 @@ export async function startCampaignLogic(campaignId: string) {
     .eq("account_id", campaign.account_id);
   const blacklistSet = new Set((blacklist ?? []).map((b) => b.telefone));
 
+  // Fetch active connected whatsapp_config sessions to prefer connected lines
+  const { data: activeConfigs } = await supabaseAdmin
+    .from("whatsapp_config")
+    .select("id, waha_session, session_status")
+    .eq("account_id", campaign.account_id)
+    .eq("provider", "waha");
+
+  const workingSessionIds: string[] = [];
+  if (activeConfigs) {
+    for (const conf of activeConfigs) {
+      if (conf.session_status === "WORKING") {
+        if (sessionIds.includes(conf.id)) workingSessionIds.push(conf.id);
+        if (conf.waha_session && sessionIds.includes(conf.waha_session)) workingSessionIds.push(conf.waha_session);
+      }
+    }
+  }
+
+  const usableSessions = workingSessionIds.length > 0 ? workingSessionIds : sessionIds;
+
   // 4. Scheduling queue generation loop
   const minDelay = (campaign.intervalo_min || 30) * 1000;
   const maxDelay = (campaign.intervalo_max || 60) * 1000;
@@ -145,7 +164,7 @@ export async function startCampaignLogic(campaignId: string) {
     if (contact.phone && blacklistSet.has(contact.phone)) continue;
 
     // Select random session ID from campaign configurations
-    const sessionId = sessionIds[Math.floor(Math.random() * sessionIds.length)];
+    const sessionId = usableSessions[Math.floor(Math.random() * usableSessions.length)];
 
     // Anti-spam pauses
     if (i > 0 && i % 100 === 0) contactDelay += 60 * 60 * 1000; // 1 hour pause every 100 contacts

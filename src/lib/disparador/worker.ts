@@ -52,7 +52,7 @@ export async function processQueueBatch() {
     // 1. Fetch campaigns that are in execution
     const { data: activeCampaigns, error: activeErr } = await supabaseAdmin
       .from("campaigns")
-      .select("id, status, created_by, janela_inicio, janela_fim")
+      .select("id, status, created_by, janela_inicio, janela_fim, account_id")
       .eq("status", "em_execucao");
 
     if (activeErr) {
@@ -177,15 +177,31 @@ export async function processQueueBatch() {
           config = data;
         }
 
-        if (!config || (config.provider && config.provider !== "waha")) {
-          throw new Error("Conexão do WhatsApp WAHA não encontrada ou inativa para esta sessão");
+        // Failover if selected config is missing or not in WORKING status
+        let activeConfig = config;
+        if (!activeConfig || activeConfig.session_status !== "WORKING") {
+          const { data: workingSessions } = await supabaseAdmin
+            .from("whatsapp_config")
+            .select("*")
+            .eq("account_id", campaign.account_id || item.account_id)
+            .eq("provider", "waha")
+            .eq("session_status", "WORKING");
+
+          if (workingSessions && workingSessions.length > 0) {
+            activeConfig = workingSessions[Math.floor(Math.random() * workingSessions.length)];
+            console.log(`[Queue Worker] Failover session for item ${item.id}: using ${activeConfig.waha_session}`);
+          }
+        }
+
+        if (!activeConfig || (activeConfig.provider && activeConfig.provider !== "waha")) {
+          throw new Error(`Sessão do WhatsApp (${config?.waha_session || item.session_id}) desconectada. Reconecte a linha em Configurações > WhatsApp.`);
         }
 
         // Build decrypted config
-        const decryptedApiKey = config.waha_api_key ? decrypt(config.waha_api_key) : null;
+        const decryptedApiKey = activeConfig.waha_api_key ? decrypt(activeConfig.waha_api_key) : null;
         const wahaConfig = {
-          waha_url: config.waha_url,
-          waha_session: config.waha_session,
+          waha_url: activeConfig.waha_url,
+          waha_session: activeConfig.waha_session,
           waha_api_key: decryptedApiKey,
         };
 
@@ -194,7 +210,7 @@ export async function processQueueBatch() {
         let messageText = item.mensagem_final || "";
 
         if (tipo === "ia") {
-          const accountId = config.account_id;
+          const accountId = activeConfig.account_id;
           const { data: aiConfig } = accountId
             ? await supabaseAdmin
                 .from("ai_config")
@@ -213,16 +229,25 @@ export async function processQueueBatch() {
                 messages: [
                   {
                     role: "system",
-                    content: "Você é um assistente de vendas para WhatsApp. Gere uma mensagem natural, sem parecer spam. Responda APENAS com a mensagem, sem explicações.",
+                    content: "Você é um assistente de vendas de WhatsApp. REGRA ABSOLUTA: Gere APENAS UMA única mensagem curta, direta e amigável. NUNCA gere múltiplas opções, listas, variações ou separadores como '---'. Responda exclusivamente com o texto final da mensagem a ser enviada.",
                   },
                   {
                     role: "user",
-                    content: `Contato: nome=${contactData?.name || ""}. Prompt: ${messageText}`,
+                    content: `Nome do Cliente: ${contactData?.name || "Cliente"}. Instrução: ${messageText}`,
                   },
                 ],
-                max_tokens: 500,
+                max_tokens: 300,
               });
-              messageText = completion.choices[0]?.message?.content || messageText;
+              let generated = completion.choices[0]?.message?.content?.trim() || messageText;
+
+              // Clean up any unintended multi-variations or '---' dividers if GPT returned them
+              if (generated.includes("---")) {
+                generated = generated.split("---")[0].trim();
+              }
+              if (/^(Opção|Variação|Opcao|Variacao)\s*\d+:/i.test(generated)) {
+                generated = generated.replace(/^(Opção|Variação|Opcao|Variacao)\s*\d+:\s*/i, "").trim();
+              }
+              messageText = generated;
             } catch (aiErr) {
               console.warn("AI generation failed, fallback to prompt text:", aiErr);
             }
