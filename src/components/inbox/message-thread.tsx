@@ -114,6 +114,7 @@ interface MessageThreadProps {
   whatsappProvider?: string;
   onDeleteConversation?: (conversationId: string) => Promise<void>;
   onUpdateConversation?: (updates: Partial<Conversation>) => void;
+  presetText?: string;
 }
 
 function formatDateSeparator(dateStr: string): string {
@@ -175,6 +176,7 @@ export function MessageThread({
   whatsappProvider = "meta",
   onDeleteConversation,
   onUpdateConversation,
+  presetText,
 }: MessageThreadProps) {
   const { user } = useAuth();
   const [voipSession, setVoipSession] = useState<string>("default");
@@ -1300,6 +1302,7 @@ export function MessageThread({
         onOpenTemplates={handleOpenTemplates}
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
+        presetText={presetText}
       />
 
       <TemplatePicker

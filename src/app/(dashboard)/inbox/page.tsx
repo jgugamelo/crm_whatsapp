@@ -36,6 +36,7 @@ export default function InboxPage() {
     null
   );
   const [whatsappProvider, setWhatsappProvider] = useState<string>("meta");
+  const [presetText, setPresetText] = useState("");
   /**
    * Bumped whenever we want children (ConversationList, MessageThread)
    * to refetch from the DB — used as a safety net against missed
@@ -665,6 +666,7 @@ export default function InboxPage() {
             onToggleContactPanel={handleToggleContactPanel}
             onDeleteConversation={handleDeleteConversation}
             onUpdateConversation={handleUpdateActiveConversation}
+            presetText={presetText}
           />
         </div>
 
@@ -678,6 +680,7 @@ export default function InboxPage() {
               contact={activeContact}
               conversation={activeConversation}
               onUpdateConversation={handleUpdateActiveConversation}
+              onUseSuggestion={(text) => setPresetText(text)}
               onUpdateContact={(updatedContact) => {
                 setActiveContact(updatedContact);
                 setConversations((prev) =>

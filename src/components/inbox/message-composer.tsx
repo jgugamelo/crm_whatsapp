@@ -101,6 +101,7 @@ interface MessageComposerProps {
   onOpenTemplates: () => void;
   replyTo?: ReplyDraft | null;
   onClearReply?: () => void;
+  presetText?: string;
 }
 
 function formatDuration(seconds: number): string {
@@ -122,6 +123,7 @@ export function MessageComposer({
   onOpenTemplates,
   replyTo,
   onClearReply,
+  presetText,
 }: MessageComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -134,6 +136,16 @@ export function MessageComposer({
     // Max 4 lines (~96px)
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }, []);
+
+  useEffect(() => {
+    if (presetText) {
+      setText(presetText);
+      setTimeout(() => {
+        adjustHeight();
+        textareaRef.current?.focus();
+      }, 50);
+    }
+  }, [presetText, adjustHeight]);
 
   const { accountId } = useAuth();
   const supabase = createClient();

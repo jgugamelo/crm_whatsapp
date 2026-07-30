@@ -16,6 +16,7 @@ import {
   Plus,
   Brain,
   RefreshCw,
+  Sparkles,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ interface ContactSidebarProps {
   conversation: Conversation | null;
   onUpdateConversation?: (updates: Partial<Conversation>) => void;
   onUpdateContact?: (contact: Contact) => void;
+  onUseSuggestion?: (suggestionText: string) => void;
 }
 
 export function ContactSidebar({
@@ -41,6 +43,7 @@ export function ContactSidebar({
   conversation,
   onUpdateConversation,
   onUpdateContact,
+  onUseSuggestion,
 }: ContactSidebarProps) {
   const { accountId } = useAuth();
   const [copied, setCopied] = useState(false);
@@ -54,6 +57,8 @@ export function ContactSidebar({
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [suggestedReply, setSuggestedReply] = useState<string>("");
+  const [generatingReply, setGeneratingReply] = useState<boolean>(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState("");
 
@@ -105,6 +110,32 @@ export function ContactSidebar({
       setAnalyzing(false);
     }
   }, [conversation, onUpdateConversation]);
+
+  const handleGenerateReplySuggestion = useCallback(async () => {
+    if (!conversation) return;
+    setGeneratingReply(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/suggest-reply`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.suggestion) {
+        setSuggestedReply(data.suggestion);
+      }
+    } catch (err) {
+      console.error("Error generating reply suggestion:", err);
+    } finally {
+      setGeneratingReply(false);
+    }
+  }, [conversation]);
+
+  // Auto-analyze sentiment and generate reply suggestion when conversation opens or changes
+  useEffect(() => {
+    if (conversation?.id) {
+      handleAnalyzeSentiment();
+      handleGenerateReplySuggestion();
+    }
+  }, [conversation?.id, handleAnalyzeSentiment, handleGenerateReplySuggestion]);
 
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
@@ -439,6 +470,55 @@ export function ContactSidebar({
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* Sugestão de Resposta (IA) */}
+          {conversation && (
+            <div className="mt-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 shadow-xs transition-all hover:border-amber-500/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                  <span>SUGESTÃO DE RESPOSTA (IA)</span>
+                </div>
+                <button
+                  onClick={handleGenerateReplySuggestion}
+                  disabled={generatingReply}
+                  className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+                  title="Gerar nova sugestão de resposta"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", generatingReply && "animate-spin")} />
+                </button>
+              </div>
+
+              <div className="mt-2.5">
+                {generatingReply ? (
+                  <div className="rounded-lg border border-dashed border-amber-500/30 bg-background/50 p-3 text-center text-xs text-muted-foreground animate-pulse">
+                    Analisando a conversa e gerando resposta para quebrar objeções...
+                  </div>
+                ) : suggestedReply ? (
+                  <div className="space-y-2.5">
+                    <div className="rounded-lg border border-border/80 bg-background/80 p-2.5 text-xs text-foreground leading-relaxed whitespace-pre-wrap select-text">
+                      {suggestedReply}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        onUseSuggestion?.(suggestedReply);
+                        toast.success("Sugestão copiada para o chat! 💬");
+                      }}
+                      className="w-full h-8 text-xs font-semibold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-xs gap-1.5"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Usar na conversa 💬
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-background/50 p-3 text-center text-xs text-muted-foreground">
+                    Clique no botão de recarregar acima para gerar uma sugestão de resposta com IA.
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
