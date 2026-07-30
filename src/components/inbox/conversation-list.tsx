@@ -271,11 +271,11 @@ export function ConversationList({
           />
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40">
+            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg bg-muted/60 hover:bg-muted border border-border/50 shrink-0 font-medium transition-colors">
                 Status: {activeFilter?.label ?? "Todos"}
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="h-3 w-3 opacity-70" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
@@ -300,7 +300,7 @@ export function ConversationList({
 
           {configs.length > 0 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[140px]">
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg bg-muted/60 hover:bg-muted border border-border/50 shrink-0 font-medium transition-colors max-w-[150px]">
                 {selectedLine !== "all" && (
                   <span
                     className={cn(
@@ -314,7 +314,7 @@ export function ConversationList({
                 <span className="truncate">
                   Linha: {selectedLine === "all" ? "Todas" : (configs.find(c => c.waha_session === selectedLine)?.phone_info?.display_phone_number || selectedLine)}
                 </span>
-                <ChevronDown className="h-3 w-3 shrink-0" />
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="start"
@@ -367,9 +367,9 @@ export function ConversationList({
 
           {tags.length > 0 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[120px]">
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg bg-muted/60 hover:bg-muted border border-border/50 shrink-0 font-medium transition-colors max-w-[130px]">
                 Tag: {selectedTag === "all" ? "Todas" : selectedTag}
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="h-3 w-3 opacity-70" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="border-border bg-popover max-h-60 overflow-y-auto">
                 <DropdownMenuItem onClick={() => setSelectedTag("all")} className={cn("text-sm", selectedTag === "all" ? "text-primary font-semibold" : "text-popover-foreground")}>
@@ -387,9 +387,9 @@ export function ConversationList({
 
           {allStages.length > 0 && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted border border-border/40 truncate max-w-[130px]">
+              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg bg-muted/60 hover:bg-muted border border-border/50 shrink-0 font-medium transition-colors max-w-[140px]">
                 Etapa: {selectedStage === "all" ? "Todas" : (allStages.find(s => s.id === selectedStage)?.name || "Selecionada")}
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="h-3 w-3 opacity-70" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="border-border bg-popover max-h-60 overflow-y-auto">
                 <DropdownMenuItem onClick={() => setSelectedStage("all")} className={cn("text-sm", selectedStage === "all" ? "text-primary font-semibold" : "text-popover-foreground")}>

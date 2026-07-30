@@ -1131,11 +1131,11 @@ export function MessageThread({
           {/* Status dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger className={cn(
-                  "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
+                  "inline-flex items-center justify-center h-7 gap-1 px-2.5 text-xs font-medium rounded-lg bg-muted/60 hover:bg-muted border border-border/50 transition-colors shrink-0",
                   currentStatus?.color ?? "text-muted-foreground"
                 )}>
                 {currentStatus?.label ?? "Status"}
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="h-3 w-3 opacity-70" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
@@ -1145,7 +1145,7 @@ export function MessageThread({
                 <DropdownMenuItem
                   key={opt.value}
                   onClick={() => handleStatusChange(opt.value)}
-                  className={cn("text-sm", opt.color)}
+                  className={cn("text-sm cursor-pointer", opt.color)}
                 >
                   {opt.label}
                 </DropdownMenuItem>
@@ -1157,13 +1157,13 @@ export function MessageThread({
           <DropdownMenu>
             <DropdownMenuTrigger
               className={cn(
-                "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
-                assignedAgentId ? "text-primary" : "text-muted-foreground"
+                "inline-flex items-center justify-center h-7 gap-1 px-2.5 text-xs font-medium rounded-lg bg-muted/60 hover:bg-muted border border-border/50 transition-colors shrink-0 max-w-[160px]",
+                assignedAgentId ? "text-primary font-semibold" : "text-muted-foreground"
               )}
             >
-              <UserPlus className="h-3 w-3" />
-              <span className="hidden sm:inline">{assignLabel}</span>
-              <ChevronDown className="h-3 w-3" />
+              <UserPlus className="h-3 w-3 shrink-0" />
+              <span className="truncate">{assignLabel}</span>
+              <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
