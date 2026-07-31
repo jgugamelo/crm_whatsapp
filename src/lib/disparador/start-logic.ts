@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { ensureQueueWorkerRunning } from "@/lib/disparador/worker";
+import { getNextValidWindowTime } from "@/lib/disparador/window-helper";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -153,7 +154,10 @@ export async function startCampaignLogic(campaignId: string) {
   const maxDelay = (campaign.intervalo_max || 60) * 1000;
   const intraDelay = 3000; // 3 seconds between sequential messages for the same contact
 
-  let contactDelay = 0;
+  const janelaInicio = campaign.janela_inicio || "08:00";
+  const janelaFim = campaign.janela_fim || "20:00";
+
+  let currentScheduleDate = getNextValidWindowTime(new Date(), janelaInicio, janelaFim);
   let enqueued = 0;
   const queueRows = [];
 
@@ -167,13 +171,18 @@ export async function startCampaignLogic(campaignId: string) {
     const sessionId = usableSessions[Math.floor(Math.random() * usableSessions.length)];
 
     // Anti-spam pauses
-    if (i > 0 && i % 100 === 0) contactDelay += 60 * 60 * 1000; // 1 hour pause every 100 contacts
-    else if (i > 0 && i % 20 === 0) contactDelay += 10 * 60 * 1000; // 10 mins pause every 20 contacts
+    if (i > 0 && i % 100 === 0) {
+      currentScheduleDate = new Date(currentScheduleDate.getTime() + 60 * 60 * 1000);
+      currentScheduleDate = getNextValidWindowTime(currentScheduleDate, janelaInicio, janelaFim);
+    } else if (i > 0 && i % 20 === 0) {
+      currentScheduleDate = new Date(currentScheduleDate.getTime() + 10 * 60 * 1000);
+      currentScheduleDate = getNextValidWindowTime(currentScheduleDate, janelaInicio, janelaFim);
+    }
 
     for (let j = 0; j < mensagens.length; j++) {
       const msg = mensagens[j];
-      const msgDelay = contactDelay + j * intraDelay;
-      const scheduledAt = new Date(Date.now() + msgDelay).toISOString();
+      currentScheduleDate = getNextValidWindowTime(currentScheduleDate, janelaInicio, janelaFim);
+      const scheduledAt = currentScheduleDate.toISOString();
 
       // Interpolate message variables
       const rawText = msg.conteudo || msg.prompt || "";
@@ -197,10 +206,16 @@ export async function startCampaignLogic(campaignId: string) {
         scheduled_at: scheduledAt,
       });
       enqueued++;
+
+      if (j < mensagens.length - 1) {
+        currentScheduleDate = new Date(currentScheduleDate.getTime() + intraDelay);
+      }
     }
 
-    // Increment delay for the next contact
-    contactDelay += (mensagens.length - 1) * intraDelay + minDelay + Math.random() * (maxDelay - minDelay);
+    // Increment delay for the next contact and clamp to valid window
+    const nextRandomDelay = minDelay + Math.random() * (maxDelay - minDelay);
+    currentScheduleDate = new Date(currentScheduleDate.getTime() + nextRandomDelay);
+    currentScheduleDate = getNextValidWindowTime(currentScheduleDate, janelaInicio, janelaFim);
   }
 
   if (queueRows.length > 0) {

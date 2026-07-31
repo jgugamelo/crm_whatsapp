@@ -3,12 +3,73 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 
 import { processQueueBatch, ensureQueueWorkerRunning } from "@/lib/disparador/worker";
+import { getNextValidWindowTime } from "@/lib/disparador/window-helper";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   { db: { schema: "wacrm" } }
 );
+
+/**
+ * Auto-corrects any `agendado` items in queue whose scheduled_at falls outside campaign sending window.
+ */
+async function sanitizeQueueScheduledTimes(accountId: string) {
+  try {
+    const { data: activeCampaigns } = await supabaseAdmin
+      .from("campaigns")
+      .select("id, janela_inicio, janela_fim")
+      .eq("account_id", accountId)
+      .eq("status", "em_execucao");
+
+    if (!activeCampaigns || activeCampaigns.length === 0) return;
+
+    for (const campaign of activeCampaigns) {
+      const janelaInicio = campaign.janela_inicio || "08:00";
+      const janelaFim = campaign.janela_fim || "20:00";
+
+      const { data: queueItems } = await supabaseAdmin
+        .from("disp_message_queue")
+        .select("id, scheduled_at")
+        .eq("campaign_id", campaign.id)
+        .eq("status", "agendado")
+        .order("scheduled_at", { ascending: true })
+        .limit(1000);
+
+      if (!queueItems || queueItems.length === 0) continue;
+
+      let currentScheduleDate = getNextValidWindowTime(new Date(), janelaInicio, janelaFim);
+      const updates: { id: string; scheduled_at: string }[] = [];
+
+      for (const item of queueItems) {
+        const itemDate = new Date(item.scheduled_at);
+        const validTime = getNextValidWindowTime(itemDate, janelaInicio, janelaFim);
+
+        // If scheduled_at is outside valid window (e.g., 04:25 AM when window is 08:00 - 20:00)
+        if (validTime.getTime() > itemDate.getTime()) {
+          currentScheduleDate = getNextValidWindowTime(currentScheduleDate, janelaInicio, janelaFim);
+          updates.push({
+            id: item.id,
+            scheduled_at: currentScheduleDate.toISOString(),
+          });
+          currentScheduleDate = new Date(currentScheduleDate.getTime() + 35000); // 35s average interval
+        }
+      }
+
+      if (updates.length > 0) {
+        console.log(`[sanitizeQueueScheduledTimes] Rescheduling ${updates.length} night/out-of-window items for campaign ${campaign.id}`);
+        for (const u of updates) {
+          await supabaseAdmin
+            .from("disp_message_queue")
+            .update({ scheduled_at: u.scheduled_at })
+            .eq("id", u.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[sanitizeQueueScheduledTimes] Warning:", err);
+  }
+}
 
 export async function GET(request: Request) {
   try {
@@ -40,6 +101,9 @@ export async function GET(request: Request) {
     }
 
     const accountId = profile.account_id;
+
+    // Self-healing check for invalid night-scheduled items
+    await sanitizeQueueScheduledTimes(accountId);
 
     // Base query for queue items
     let query = supabaseAdmin
