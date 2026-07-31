@@ -233,6 +233,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const fallbackName = data.email ? data.email.split("@")[0] : "Usuário";
         const finalName = rawName && rawName !== "" ? rawName : fallbackName;
 
+        const { data: authUserData } = await supabase.auth.getUser();
+        const userMetaInclude = authUserData.user?.user_metadata?.include_agent_name;
+        const includeAgentName = data.include_agent_name !== false && userMetaInclude !== false;
+
         setProfile({
           id: data.id,
           full_name: finalName,
@@ -242,6 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           beta_features: data.beta_features ?? [],
           account_id: data.account_id ?? null,
           account_role: accountRole,
+          include_agent_name: includeAgentName,
         });
         setAccount(accountRow);
       }

@@ -38,7 +38,7 @@ export function ProfileForm() {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [includeAgentName, setIncludeAgentName] = useState(false);
+  const [includeAgentName, setIncludeAgentName] = useState(true);
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -50,10 +50,12 @@ export function ProfileForm() {
     if (profile) {
       setFullName(profile.full_name ?? '');
       setEmail(profile.email ?? user?.email ?? '');
-      setIncludeAgentName(Boolean(profile.include_agent_name));
+      const metaSetting = user?.user_metadata?.include_agent_name;
+      setIncludeAgentName(profile.include_agent_name !== false && metaSetting !== false);
     } else if (user) {
       setEmail(user.email ?? '');
       setFullName((user.user_metadata?.full_name as string) ?? '');
+      setIncludeAgentName(user.user_metadata?.include_agent_name !== false);
     }
   }, [profile, user]);
 
@@ -200,11 +202,12 @@ export function ProfileForm() {
     }
   };
 
+  const initialInclude = profile?.include_agent_name !== false && user?.user_metadata?.include_agent_name !== false;
   const dirty =
     !!profile &&
     (fullName.trim() !== (profile.full_name ?? '') ||
       email.trim().toLowerCase() !== (profile.email ?? '').toLowerCase() ||
-      includeAgentName !== Boolean(profile.include_agent_name) ||
+      includeAgentName !== initialInclude ||
       pendingAvatar !== null ||
       removeAvatar);
 
