@@ -1,6 +1,4 @@
-'use client';
-
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -11,6 +9,7 @@ import {
 import {
   parseContactCsv,
   type ParsedContactRow,
+  type NameFormatMode,
 } from '@/lib/contacts/parse-contact-csv';
 import {
   assignImportedContactTags,
@@ -28,6 +27,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Upload,
   FileText,
@@ -36,6 +43,7 @@ import {
   XCircle,
   AlertTriangle,
   Tag,
+  UserCheck,
 } from 'lucide-react';
 
 const DEFAULT_TAG_COLOR = '#3b82f6';
@@ -128,7 +136,10 @@ export function ImportModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
+  const [rawCsvText, setRawCsvText] = useState<string>('');
+  const [nameMode, setNameMode] = useState<NameFormatMode>('title_case');
   const [parsedRows, setParsedRows] = useState<ParsedContactRow[]>([]);
+  const [invalidRowsCount, setInvalidRowsCount] = useState<number>(0);
   const [hasTagsColumn, setHasTagsColumn] = useState(false);
   const [hasCompanyColumn, setHasCompanyColumn] = useState(false);
   const [tagColorByKey, setTagColorByKey] = useState<Map<string, string>>(
@@ -144,7 +155,10 @@ export function ImportModal({
 
   function reset() {
     setFile(null);
+    setRawCsvText('');
+    setNameMode('title_case');
     setParsedRows([]);
+    setInvalidRowsCount(0);
     setHasTagsColumn(false);
     setHasCompanyColumn(false);
     setTagColorByKey(new Map());
@@ -157,6 +171,45 @@ export function ImportModal({
     onOpenChange(next);
   }
 
+  const processCsvText = useCallback(
+    async (text: string, mode: NameFormatMode) => {
+      const {
+        rows,
+        hasTagsColumn: csvHasTags,
+        hasCompanyColumn: csvHasCompany,
+        invalidRowsCount: invalidCount,
+      } = parseContactCsv(text, mode);
+
+      setParsedRows(rows);
+      setHasTagsColumn(csvHasTags);
+      setHasCompanyColumn(csvHasCompany);
+      setInvalidRowsCount(invalidCount);
+
+      if (csvHasTags && accountId) {
+        const { data: tags } = await supabase
+          .from('tags')
+          .select('name, color')
+          .eq('account_id', accountId);
+
+        const colors = new Map<string, string>();
+        for (const tag of tags ?? []) {
+          const key = tag.name.trim().toLowerCase();
+          if (!colors.has(key)) colors.set(key, tag.color);
+        }
+        setTagColorByKey(colors);
+      } else {
+        setTagColorByKey(new Map());
+      }
+
+      if (rows.length === 0) {
+        toast.error(
+          'Nenhuma linha válida encontrada. Certifique-se de que o CSV possui números de telefone válidos.'
+        );
+      }
+    },
+    [accountId, supabase]
+  );
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
     if (!selected) return;
@@ -165,41 +218,14 @@ export function ImportModal({
     setResult(null);
 
     const text = await selected.text();
-    const {
-      rows,
-      hasTagsColumn: csvHasTags,
-      hasCompanyColumn: csvHasCompany,
-    } = parseContactCsv(text);
+    setRawCsvText(text);
+    await processCsvText(text, nameMode);
+  }
 
-    if (rows.length === 0) {
-      toast.error(
-        'Nenhuma linha válida encontrada. Certifique-se de que o CSV possui o cabeçalho de coluna "phone".'
-      );
-      setParsedRows([]);
-      setHasTagsColumn(false);
-      setHasCompanyColumn(false);
-      setTagColorByKey(new Map());
-      return;
-    }
-
-    setParsedRows(rows);
-    setHasTagsColumn(csvHasTags);
-    setHasCompanyColumn(csvHasCompany);
-
-    if (csvHasTags && accountId) {
-      const { data: tags } = await supabase
-        .from('tags')
-        .select('name, color')
-        .eq('account_id', accountId);
-
-      const colors = new Map<string, string>();
-      for (const tag of tags ?? []) {
-        const key = tag.name.trim().toLowerCase();
-        if (!colors.has(key)) colors.set(key, tag.color);
-      }
-      setTagColorByKey(colors);
-    } else {
-      setTagColorByKey(new Map());
+  function handleNameModeChange(mode: NameFormatMode) {
+    setNameMode(mode);
+    if (rawCsvText) {
+      void processCsvText(rawCsvText, mode);
     }
   }
 
@@ -484,7 +510,52 @@ export function ImportModal({
           />
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {file && !result && (
+            <div className="flex flex-col gap-2.5 rounded-xl border border-border/80 bg-muted/30 p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-semibold text-foreground">
+                    Formatação dos Nomes:
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Escolha como os nomes do CSV serão padronizados ao importar
+                  </p>
+                </div>
+                <Select
+                  value={nameMode}
+                  onValueChange={(val) => {
+                    if (val) handleNameModeChange(val as NameFormatMode);
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-60 text-xs bg-background">
+                    <SelectValue placeholder="Formato do Nome" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="title_case">
+                      Nome Completo (ex: Fabiane Ferreira)
+                    </SelectItem>
+                    <SelectItem value="first_name">
+                      Apenas Primeiro Nome (ex: Fabiane)
+                    </SelectItem>
+                    <SelectItem value="original">
+                      Conforme o Arquivo (Original)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {invalidRowsCount > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="size-4 shrink-0 text-amber-500" />
+                  <span>
+                    <strong>{invalidRowsCount}</strong> linha{invalidRowsCount !== 1 ? 's' : ''} com telefone inválido ou incompleto {invalidRowsCount !== 1 ? 'foram descartadas' : 'foi descartada'}.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {preview.length > 0 && !result && (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">

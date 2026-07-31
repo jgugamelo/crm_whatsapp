@@ -3,6 +3,8 @@
  * tag-column handling stays aligned with phone/name/email/company.
  */
 
+export type NameFormatMode = 'title_case' | 'first_name' | 'original';
+
 export interface ParsedContactRow {
   phone: string;
   name?: string;
@@ -37,36 +39,126 @@ export interface ParseContactCsvResult {
   hasTagsColumn: boolean;
   /** True when the CSV header includes a `company` column. */
   hasCompanyColumn: boolean;
+  /** Count of rows skipped due to invalid/incomplete phone numbers. */
+  invalidRowsCount: number;
+}
+
+/**
+ * Portuguese Title Case / First Name formatting:
+ * - Capitalizes first letter of words.
+ * - Lowercases connectives: da, de, do, das, dos, e.
+ * - Respects accents (Á, É, Í, Ó, Ú, Â, Ê, Ô, Ã, Õ, Ç).
+ * - Option 'first_name' extracts only the first name (e.g. "Fabiane").
+ */
+export function formatName(
+  name: string | undefined,
+  mode: NameFormatMode = 'title_case'
+): string | undefined {
+  if (!name || !name.trim()) return undefined;
+  const trimmed = name.trim();
+  if (mode === 'original') return trimmed;
+
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return undefined;
+
+  if (mode === 'first_name') {
+    const first = words[0].toLowerCase();
+    return first.charAt(0).toUpperCase() + first.slice(1);
+  }
+
+  // Title Case for full name
+  const connectives = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+  const formatted = words.map((w, idx) => {
+    const lower = w.toLowerCase();
+    if (idx > 0 && idx < words.length - 1 && connectives.has(lower)) {
+      return lower;
+    }
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  });
+
+  return formatted.join(' ');
 }
 
 /** 
- * Automatically clean and prefix phone numbers, especially for Brazil:
- * - If 10 or 11 digits (e.g. 21999999999), prepends 55 (Brazil).
- * - Always returns normalized E.164 with '+' prefix.
+ * Strict phone normalization and validation:
+ * - Always prepends +55 for 10-digit (landline) or 11-digit (mobile) Brazilian numbers.
+ * - Ensures valid DDD (11 to 99) and correct digit counts:
+ *   - Mobile: 13 digits (+55 + 2 DDD + 9 digits starting with 9) e.g., +5521964178103
+ *   - Landline: 12 digits (+55 + 2 DDD + 8 digits starting with 2..5) e.g., +552133445566
+ * - Returns { phone: '+55...', isValid: true } or { phone: '', isValid: false } for incomplete/invalid numbers.
  */
-export function smartNormalizePhone(phone: string): string {
+export function normalizeAndValidatePhone(phone: string): { phone: string; isValid: boolean } {
   let cleaned = phone.replace(/\D/g, '');
-  if (!cleaned) return '';
-  
-  if (cleaned.startsWith('00')) {
-    cleaned = cleaned.slice(2);
+  if (!cleaned) return { phone: '', isValid: false };
+
+  // Remove leading zeros (e.g. 021964178103 or 005521964178103)
+  while (cleaned.startsWith('0')) {
+    cleaned = cleaned.slice(1);
   }
-  
-  // If it is 10 or 11 digits, and starts with a valid Brazilian DDD (11 to 99)
-  if (cleaned.length === 10 || cleaned.length === 11) {
-    const ddd = parseInt(cleaned.slice(0, 2), 10);
-    if (ddd >= 11 && ddd <= 99) {
-      cleaned = '55' + cleaned;
+
+  if (!cleaned) return { phone: '', isValid: false };
+
+  // If number does not start with 55, check if it's a Brazilian number missing 55
+  if (!cleaned.startsWith('55')) {
+    if (cleaned.length === 10 || cleaned.length === 11) {
+      const ddd = parseInt(cleaned.slice(0, 2), 10);
+      if (ddd >= 11 && ddd <= 99) {
+        cleaned = '55' + cleaned;
+      }
     }
   }
-  
-  return '+' + cleaned;
+
+  // Brazilian number check (+55)
+  if (cleaned.startsWith('55')) {
+    // Total digits for Brazil must be 12 (landline) or 13 (mobile)
+    if (cleaned.length < 12 || cleaned.length > 13) {
+      return { phone: '', isValid: false };
+    }
+
+    const ddd = parseInt(cleaned.slice(2, 4), 10);
+    if (isNaN(ddd) || ddd < 11 || ddd > 99) {
+      return { phone: '', isValid: false };
+    }
+
+    const numberPart = cleaned.slice(4);
+    // Mobile numbers (length 13 -> 9 digits in numberPart) must start with 9
+    if (cleaned.length === 13) {
+      if (!numberPart.startsWith('9')) {
+        return { phone: '', isValid: false };
+      }
+    }
+    // Landline numbers (length 12 -> 8 digits in numberPart) must start with 2, 3, 4, or 5
+    else if (cleaned.length === 12) {
+      const firstDigit = numberPart.charAt(0);
+      if (!['2', '3', '4', '5'].includes(firstDigit)) {
+        return { phone: '', isValid: false };
+      }
+    }
+
+    return { phone: '+' + cleaned, isValid: true };
+  }
+
+  // Non-Brazilian international numbers (10 to 15 digits)
+  if (cleaned.length >= 10 && cleaned.length <= 15) {
+    return { phone: '+' + cleaned, isValid: true };
+  }
+
+  return { phone: '', isValid: false };
 }
 
-export function parseContactCsv(text: string): ParseContactCsvResult {
+/** Legacy helper for backward compatibility */
+export function smartNormalizePhone(phone: string): string {
+  const result = normalizeAndValidatePhone(phone);
+  return result.isValid ? result.phone : '';
+}
+
+export function parseContactCsv(
+  text: string,
+  nameMode: NameFormatMode = 'title_case'
+): ParseContactCsvResult {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) {
-    return { rows: [], hasTagsColumn: false, hasCompanyColumn: false };
+    return { rows: [], hasTagsColumn: false, hasCompanyColumn: false, invalidRowsCount: 0 };
   }
 
   // Auto-detect delimiter: comma vs semicolon (semicolon is very common in Excel exports in Brazil/Europe)
@@ -92,7 +184,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
 
   const phoneIdx = findHeaderIndex(phoneAliases);
   if (phoneIdx === -1) {
-    return { rows: [], hasTagsColumn: false, hasCompanyColumn: false };
+    return { rows: [], hasTagsColumn: false, hasCompanyColumn: false, invalidRowsCount: 0 };
   }
 
   const nameIdx = findHeaderIndex(nameAliases);
@@ -101,6 +193,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const tagsIdx = findHeaderIndex(tagsAliases);
 
   const rows: ParsedContactRow[] = [];
+  let invalidRowsCount = 0;
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -108,17 +201,23 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
 
     const values = parseCsvLine(line, delimiter);
     const rawPhone = values[phoneIdx]?.replace(/["']/g, '').trim();
-    if (!rawPhone) continue;
+    if (!rawPhone) {
+      invalidRowsCount++;
+      continue;
+    }
 
-    const phone = smartNormalizePhone(rawPhone);
-    if (!phone || phone === '+') continue;
+    const { phone, isValid } = normalizeAndValidatePhone(rawPhone);
+    if (!isValid || !phone) {
+      invalidRowsCount++;
+      continue;
+    }
+
+    const rawName = nameIdx >= 0 ? values[nameIdx]?.replace(/["']/g, '').trim() || undefined : undefined;
+    const formattedName = formatName(rawName, nameMode);
 
     rows.push({
       phone,
-      name:
-        nameIdx >= 0
-          ? values[nameIdx]?.replace(/["']/g, '').trim() || undefined
-          : undefined,
+      name: formattedName,
       email:
         emailIdx >= 0
           ? values[emailIdx]?.replace(/["']/g, '').trim() || undefined
@@ -136,6 +235,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     rows,
     hasTagsColumn: tagsIdx >= 0,
     hasCompanyColumn: companyIdx >= 0,
+    invalidRowsCount,
   };
 }
 
@@ -158,3 +258,4 @@ function parseCsvLine(line: string, delimiter: string = ','): string[] {
   values.push(current.trim());
   return values;
 }
+
