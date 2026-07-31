@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     // returned nothing for teammates who didn't author the row.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id')
+      .select('account_id, full_name, include_agent_name')
       .eq('user_id', user.id)
       .maybeSingle()
     const accountId = profile?.account_id as string | undefined
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const {
+    let {
       // `conversation_id` targets an existing thread (inbox). `contact_id`
       // lets a caller initiate from a contact that may have no conversation
       // yet (Contact detail → Send template) — we find-or-create one below.
@@ -84,6 +84,22 @@ export async function POST(request: Request) {
       reply_to_message_id,
       waha_session,
     } = body
+
+    // Agent Signature: if profile has `include_agent_name` enabled, prepend "*AgentName:* "
+    if (
+      profile?.include_agent_name &&
+      typeof content_text === 'string' &&
+      content_text.trim()
+    ) {
+      const agentName = profile.full_name?.trim() || 'Atendente'
+      const prefix = `*${agentName}:* `
+      if (
+        !content_text.startsWith(prefix) &&
+        !content_text.startsWith(`*${agentName}*`)
+      ) {
+        content_text = `${prefix}${content_text}`
+      }
+    }
 
     if ((!conversationIdInput && !contact_id) || !message_type) {
       return NextResponse.json(

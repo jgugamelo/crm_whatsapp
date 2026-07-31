@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Upload, Trash2, Mail, CircleAlert } from 'lucide-react';
+import { Loader2, Upload, Trash2, Mail, CircleAlert, UserCheck } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Avatar,
   AvatarFallback,
@@ -37,6 +38,7 @@ export function ProfileForm() {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [includeAgentName, setIncludeAgentName] = useState(false);
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -48,6 +50,7 @@ export function ProfileForm() {
     if (profile) {
       setFullName(profile.full_name ?? '');
       setEmail(profile.email ?? user?.email ?? '');
+      setIncludeAgentName(Boolean(profile.include_agent_name));
     } else if (user) {
       setEmail(user.email ?? '');
       setFullName((user.user_metadata?.full_name as string) ?? '');
@@ -141,12 +144,13 @@ export function ProfileForm() {
         nextAvatarUrl = null;
       }
 
-      // Persist name + avatar to profiles.
+      // Persist name + avatar + agent signature setting to profiles.
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
           full_name: trimmedName,
           avatar_url: nextAvatarUrl,
+          include_agent_name: includeAgentName,
         })
         .eq('user_id', user.id);
       if (updateError) {
@@ -197,6 +201,7 @@ export function ProfileForm() {
     !!profile &&
     (fullName.trim() !== (profile.full_name ?? '') ||
       email.trim().toLowerCase() !== (profile.email ?? '').toLowerCase() ||
+      includeAgentName !== Boolean(profile.include_agent_name) ||
       pendingAvatar !== null ||
       removeAvatar);
 
@@ -216,127 +221,145 @@ export function ProfileForm() {
       />
       <form onSubmit={onSubmit} className="space-y-4">
         <Card>
-          <CardContent className="space-y-6">
-          {/* Avatar row */}
-          <div className="flex flex-wrap items-center gap-5">
-            <Avatar size="lg" className="size-16">
-              {currentAvatar ? (
-                <AvatarImage src={currentAvatar} alt={fullName || 'Avatar'} />
-              ) : null}
-              <AvatarFallback className="bg-primary/10 text-base text-primary">
-                {initial}
-              </AvatarFallback>
-            </Avatar>
+          <CardContent className="space-y-6 pt-6">
+            {/* Avatar section */}
+            <div className="flex items-center gap-4">
+              <Avatar className="size-20 border border-border">
+                {currentAvatar ? (
+                  <AvatarImage src={currentAvatar} alt={fullName || 'Avatar'} />
+                ) : null}
+                <AvatarFallback className="text-xl font-bold">
+                  {initial}
+                </AvatarFallback>
+              </Avatar>
 
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                className="hidden"
-                onChange={onPickFile}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={saving}
-              >
-                <Upload className="size-4" />
-                {currentAvatar ? 'Alterar foto' : 'Enviar foto'}
-              </Button>
-              {currentAvatar && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={onRemoveAvatar}
-                  disabled={saving}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Trash2 className="size-4" />
-                  Remover
-                </Button>
-              )}
-              <p className="w-full text-xs text-muted-foreground">
-                PNG, JPG, WebP ou GIF. Até 2 MB.
-              </p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    onChange={onPickFile}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="size-4" />
+                    {currentAvatar ? 'Alterar foto' : 'Enviar foto'}
+                  </Button>
+
+                  {currentAvatar && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={onRemoveAvatar}
+                    >
+                      <Trash2 className="size-4" />
+                      Remover
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  PNG, JPG, WebP ou GIF até 2 MB.
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Name */}
-          <div className="space-y-2">
-            <Label htmlFor="profile-full-name" className="text-foreground">
-              Nome de exibição
-            </Label>
-            <Input
-              id="profile-full-name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="ex: Maria Silva"
-              maxLength={120}
-              disabled={saving}
-              required
-            />
-          </div>
+            {/* Form fields */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="full_name">Nome de exibição</Label>
+                <Input
+                  id="full_name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  required
+                />
+              </div>
 
-          {/* Email */}
-          <div className="space-y-2">
-            <Label htmlFor="profile-email" className="text-foreground">
-              E-mail
-            </Label>
-            <Input
-              id="profile-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={saving}
-              required
-            />
-            {emailChangePending && (
-              <p className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                <Mail className="mt-0.5 size-3.5 shrink-0" />
-                <span>
-                  Verifique a caixa de entrada de <strong>{profile?.email}</strong> e{' '}
-                  <strong>{email}</strong> para confirmar a alteração.
-                </span>
+              <div className="space-y-2">
+                <Label htmlFor="email">Endereço de e-mail</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="voce@empresa.com"
+                  required
+                />
+                {emailChangePending && (
+                  <p className="flex items-start gap-1.5 text-xs text-amber-500">
+                    <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                    <span>
+                      Enviamos um link de confirmação para{' '}
+                      <strong>{email}</strong> para confirmar a alteração.
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              {/* Signature toggle section */}
+              <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4 shadow-sm">
+                <div className="space-y-1 pr-4">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-primary" />
+                    <Label htmlFor="agent_signature" className="text-sm font-semibold text-foreground cursor-pointer">
+                      Identificar Atendente nas Mensagens (Assinatura)
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Adiciona automaticamente seu nome no início de cada mensagem enviada no WhatsApp (ex:{' '}
+                    <span className="font-mono font-medium text-primary">*{(fullName || 'Atendente').split(' ')[0]}:* Olá! Como posso ajudar?</span>).
+                  </p>
+                </div>
+                <Switch
+                  id="agent_signature"
+                  checked={includeAgentName}
+                  onCheckedChange={setIncludeAgentName}
+                />
+              </div>
+            </div>
+
+            {/* Read-only block */}
+            <div className="rounded-lg border border-border bg-muted p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Detalhes da Conta
               </p>
-            )}
-          </div>
-
-          {/* Read-only block */}
-          <div className="rounded-lg border border-border bg-muted p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Detalhes da Conta
-            </p>
-            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-muted-foreground">Função / Cargo</dt>
-                <dd className="mt-0.5 font-mono text-foreground capitalize">
-                  {profile?.account_role === 'owner'
-                    ? 'Proprietário'
-                    : profile?.account_role === 'admin'
-                    ? 'Administrador'
-                    : profile?.account_role === 'agent'
-                    ? 'Consultor'
-                    : profile?.account_role === 'viewer'
-                    ? 'Visualizador'
-                    : profile?.account_role ?? 'Membro'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Membro desde</dt>
-                <dd className="mt-0.5 text-foreground">{joined}</dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-muted-foreground">ID do Usuário</dt>
-                <dd className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
-                  {user?.id ?? '—'}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-        </CardContent>
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground">Função / Cargo</dt>
+                  <dd className="mt-0.5 font-mono text-foreground capitalize">
+                    {profile?.account_role === 'owner'
+                      ? 'Proprietário'
+                      : profile?.account_role === 'admin'
+                      ? 'Administrador'
+                      : profile?.account_role === 'agent'
+                      ? 'Consultor'
+                      : profile?.account_role === 'viewer'
+                      ? 'Visualizador'
+                      : profile?.account_role ?? 'Membro'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Membro desde</dt>
+                  <dd className="mt-0.5 text-foreground">{joined}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-muted-foreground">ID do Usuário</dt>
+                  <dd className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
+                    {user?.id ?? '—'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </CardContent>
         </Card>
 
         <div className="flex justify-end">

@@ -21,6 +21,7 @@ import {
   Square,
   X,
   Loader2,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GatedButton } from "@/components/ui/gated-button";
@@ -125,6 +126,7 @@ export function MessageComposer({
   onClearReply,
   presetText,
 }: MessageComposerProps) {
+  const { profile } = useAuth();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -711,9 +713,15 @@ export function MessageComposer({
           `items-end` buttons below the textarea. Indented to line up
           under the textarea left edge. */}
       {!draft && !recording && (
-        <p className="mt-1 pl-[5.5rem] text-[10px] text-muted-foreground">
-          Digite &apos;/&apos; para respostas rápidas
-        </p>
+        <div className="mt-1 flex items-center justify-between pl-[5.5rem] pr-2 text-[10px] text-muted-foreground select-none">
+          <p>Digite &apos;/&apos; para respostas rápidas</p>
+          {profile?.include_agent_name && (
+            <span className="inline-flex items-center gap-1 font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+              <UserCheck className="h-3 w-3" />
+              Assinatura ativa (*{(profile.full_name || "Atendente").split(" ")[0]}:*)
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

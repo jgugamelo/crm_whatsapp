@@ -35,6 +35,7 @@ interface Profile {
   beta_features: string[];
   account_id: string | null;
   account_role: AccountRole | null;
+  include_agent_name?: boolean;
 }
 
 interface AccountSummary {
@@ -150,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
+          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, include_agent_name",
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -184,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               },
               { onConflict: "user_id" }
             )
-            .select("id, full_name, email, avatar_url, role, beta_features, account_id, account_role")
+            .select("id, full_name, email, avatar_url, role, beta_features, account_id, account_role, include_agent_name")
             .maybeSingle();
 
           if (createdProfile) {
