@@ -58,6 +58,24 @@ interface QueueLog {
   campaigns?: { id?: string; nome: string };
 }
 
+export function sanitizeDisplayMessage(text: string): string {
+  if (!text) return "";
+  let cleaned = text.trim();
+
+  // Strip "Prompt: ..." directive instructions from display if present
+  if (/^Prompt:/i.test(cleaned)) {
+    const parts = cleaned.split(/\r?\n\r?\n/);
+    if (parts.length > 1) {
+      cleaned = parts.slice(1).join("\n\n").trim();
+    } else {
+      cleaned = cleaned.replace(/^Prompt:[^\n]*\n?/i, "").trim();
+    }
+  }
+
+  cleaned = cleaned.replace(/^Instrução:[^\n]*\n?/i, "").trim();
+  return cleaned || text;
+}
+
 export default function DisparadorDashboardPage() {
   const { accountId } = useAuth();
   const router = useRouter();
@@ -368,7 +386,7 @@ export default function DisparadorDashboardPage() {
                         </span>
                       </div>
                       <p className="text-muted-foreground truncate mt-0.5 text-[10px] leading-relaxed">
-                        {item.mensagem_final}
+                        {sanitizeDisplayMessage(item.mensagem_final)}
                       </p>
                       {item.status === "erro" && (
                         <p className="text-red-500 text-[9px] flex items-center gap-1 mt-0.5">
@@ -510,7 +528,7 @@ export default function DisparadorDashboardPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleCopyMessage(selectedItem.mensagem_final)}
+                    onClick={() => handleCopyMessage(sanitizeDisplayMessage(selectedItem.mensagem_final))}
                     className="h-6 text-[10px] gap-1 px-2"
                   >
                     {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
@@ -519,7 +537,7 @@ export default function DisparadorDashboardPage() {
                 </div>
 
                 <div className="rounded-xl border border-border bg-muted/30 p-3 font-sans text-xs whitespace-pre-wrap leading-relaxed text-foreground max-h-48 overflow-y-auto">
-                  {selectedItem.mensagem_final}
+                  {sanitizeDisplayMessage(selectedItem.mensagem_final)}
                 </div>
               </div>
             </div>

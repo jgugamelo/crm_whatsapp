@@ -197,6 +197,7 @@ export async function POST(request: Request) {
       .from("disp_message_queue")
       .update({
         status: "enviado",
+        mensagem_final: cleanText,
         sent_at: new Date().toISOString(),
         waha_message_id: wahaMessageId,
         tentativas: (item.tentativas || 0) + 1,

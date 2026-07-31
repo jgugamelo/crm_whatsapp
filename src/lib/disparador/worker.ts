@@ -319,12 +319,13 @@ export async function processQueueBatch() {
           await sendWahaStopTyping(wahaConfig, normalizedPhone);
         }
 
-        // Update queue item as sent
+        // Update queue item as sent with the actual clean sent message text
         const nowSent = new Date().toISOString();
         await supabaseAdmin
           .from("disp_message_queue")
           .update({
             status: "enviado",
+            mensagem_final: cleanText,
             processed_at: nowSent,
             wamid: wahaMessageId,
             error_message: null,
