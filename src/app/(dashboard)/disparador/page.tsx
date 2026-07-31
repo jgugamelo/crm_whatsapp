@@ -13,10 +13,18 @@ import {
   Inbox,
   AlertTriangle,
   Search,
-  Filter,
-  ListFilter
+  Copy,
+  ExternalLink,
+  RotateCw,
+  MessageSquare,
+  Calendar,
+  User,
+  Phone,
+  Mail,
+  Check
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,27 +34,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
 
 interface QueueLog {
   id: string;
-  campaign_id: string;
+  campaign_id?: string;
+  contact_id?: string;
   mensagem_final: string;
   status: string;
   scheduled_at: string;
   sent_at?: string;
   erro?: string;
-  contacts?: { nome: string; phone: string };
-  campaigns?: { nome: string };
+  contacts?: { id?: string; nome: string; phone: string; email?: string };
+  campaigns?: { id?: string; nome: string };
 }
 
 export default function DisparadorDashboardPage() {
   const { accountId } = useAuth();
+  const router = useRouter();
   const [queue, setQueue] = useState<QueueLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string>("todos");
   const [limit, setLimit] = useState<number>(500);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedItem, setSelectedItem] = useState<QueueLog | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const [stats, setStats] = useState({
     scheduled: 0,
     sending: 0,
@@ -74,12 +97,53 @@ export default function DisparadorDashboardPage() {
         const data = await res.json();
         setQueue(data.queue ?? []);
         if (data.stats) setStats(data.stats);
+
+        // Keep selected item updated if modal is open
+        if (selectedItem) {
+          const updated = (data.queue ?? []).find((item: QueueLog) => item.id === selectedItem.id);
+          if (updated) setSelectedItem(updated);
+        }
       }
     } catch (err) {
       console.error("Failed to load queue dashboard stats:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetryItem = async (queueId: string) => {
+    setRetrying(true);
+    try {
+      const res = await fetch("/api/disparador/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queueId }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Falha ao reagendar mensagem");
+      }
+
+      toast.success("Mensagem colocada na fila para reenvio!");
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao tentar reenviar");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const handleCopyMessage = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast.success("Texto da mensagem copiado!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleOpenInboxChat = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, "");
+    router.push(`/inbox?phone=${cleanPhone}`);
   };
 
   const filteredQueue = useMemo(() => {
@@ -205,7 +269,9 @@ export default function DisparadorDashboardPage() {
                 Exibindo {filteredQueue.length} {selectedStatus !== "todos" ? `(${selectedStatus})` : ""}
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">Atualização automática a cada 5 segundos</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Clique em qualquer mensagem para ver os detalhes completos
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
@@ -257,6 +323,7 @@ export default function DisparadorDashboardPage() {
           </div>
         </header>
 
+        {/* Queue List */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">
           {loading ? (
             <div className="flex h-32 items-center justify-center text-muted-foreground">
@@ -276,11 +343,12 @@ export default function DisparadorDashboardPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-2.5 font-mono text-[11px]">
+            <div className="space-y-2 font-mono text-[11px]">
               {filteredQueue.map((item) => (
                 <div 
-                  key={item.id} 
-                  className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/40 pb-2.5 last:border-0 last:pb-0 gap-2 hover:bg-muted/20 p-2 rounded-lg transition-colors"
+                  key={item.id}
+                  onClick={() => setSelectedItem(item)}
+                  className="group flex flex-col sm:flex-row sm:items-center justify-between border border-border/40 hover:border-primary/40 bg-card hover:bg-muted/30 p-3 rounded-xl transition-all cursor-pointer shadow-2xs gap-2"
                 >
                   <div className="flex items-start gap-2.5 truncate flex-1 min-w-0">
                     <div className="mt-0.5 shrink-0">
@@ -291,7 +359,7 @@ export default function DisparadorDashboardPage() {
                     </div>
                     <div className="truncate flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-foreground">
+                        <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
                           {item.contacts?.nome || "Contato"}
                         </span>
                         <span className="text-muted-foreground text-[10px]">({item.contacts?.phone || "Sem Número"})</span>
@@ -310,20 +378,25 @@ export default function DisparadorDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0 sm:ml-4">
-                    <span className={`text-[10px] font-semibold uppercase px-2.5 py-0.5 rounded-full ${
-                      item.status === "enviado" ? "text-emerald-500 bg-emerald-500/10" :
-                      item.status === "erro" ? "text-red-500 bg-red-500/10" :
-                      item.status === "enviando" ? "text-primary bg-primary/10" : "text-zinc-500 bg-zinc-100 dark:bg-zinc-800"
-                    }`}>
-                      {item.status === "agendado" ? "Agendado" : item.status}
+                  <div className="flex items-center gap-3 shrink-0 sm:ml-4 justify-between sm:justify-end">
+                    <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline-block">
+                      Ver detalhes ➔
                     </span>
-                    <span className="block text-[9px] text-muted-foreground mt-1 font-sans">
-                      {item.status === "enviado" && item.sent_at
-                        ? new Date(item.sent_at).toLocaleTimeString()
-                        : new Date(item.scheduled_at).toLocaleTimeString()
-                      }
-                    </span>
+                    <div className="text-right">
+                      <span className={`text-[10px] font-semibold uppercase px-2.5 py-0.5 rounded-full ${
+                        item.status === "enviado" ? "text-emerald-500 bg-emerald-500/10" :
+                        item.status === "erro" ? "text-red-500 bg-red-500/10" :
+                        item.status === "enviando" ? "text-primary bg-primary/10" : "text-zinc-500 bg-zinc-100 dark:bg-zinc-800"
+                      }`}>
+                        {item.status === "agendado" ? "Agendado" : item.status}
+                      </span>
+                      <span className="block text-[9px] text-muted-foreground mt-1 font-sans">
+                        {item.status === "enviado" && item.sent_at
+                          ? new Date(item.sent_at).toLocaleTimeString()
+                          : new Date(item.scheduled_at).toLocaleTimeString()
+                        }
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -331,6 +404,134 @@ export default function DisparadorDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Item Details Dialog */}
+      <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
+        <DialogContent className="max-w-md sm:max-w-lg border-border bg-card">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              {selectedItem?.status === "enviado" && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+              {selectedItem?.status === "erro" && <AlertCircle className="h-5 w-5 text-red-500" />}
+              {selectedItem?.status === "enviando" && <Loader2 className="h-5 w-5 text-primary animate-spin" />}
+              {selectedItem?.status === "agendado" && <Clock className="h-5 w-5 text-zinc-400" />}
+              <DialogTitle className="text-base">Detalhes da Mensagem na Fila</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              ID da Mensagem: <code className="font-mono">{selectedItem?.id}</code>
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedItem && (
+            <div className="space-y-4 py-2 text-xs">
+              {/* Status Badge Banner */}
+              <div className={`rounded-xl p-3 border flex items-center justify-between ${
+                selectedItem.status === "enviado" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400" :
+                selectedItem.status === "erro" ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400" :
+                selectedItem.status === "enviando" ? "bg-primary/10 border-primary/30 text-primary" :
+                "bg-muted/40 border-border text-muted-foreground"
+              }`}>
+                <div className="flex items-center gap-2 font-medium">
+                  <span className="uppercase tracking-wider font-bold text-[11px]">
+                    Status: {selectedItem.status === "agendado" ? "Agendado para envio" : selectedItem.status}
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono">
+                  {selectedItem.sent_at
+                    ? `Enviado às ${new Date(selectedItem.sent_at).toLocaleTimeString()}`
+                    : `Agendado: ${new Date(selectedItem.scheduled_at).toLocaleTimeString()}`}
+                </span>
+              </div>
+
+              {/* Error Alert Box (if error) */}
+              {selectedItem.status === "erro" && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-red-600 dark:text-red-300 space-y-2">
+                  <div className="flex items-center gap-1.5 font-semibold text-xs">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" /> Motivo da Falha:
+                  </div>
+                  <p className="text-xs font-mono bg-background/50 p-2 rounded border border-red-500/20 whitespace-pre-wrap break-all">
+                    {selectedItem.erro || "Ocorreu um erro desconhecido durante o disparo."}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={retrying}
+                    onClick={() => handleRetryItem(selectedItem.id)}
+                    className="w-full h-8 text-xs gap-1.5 mt-1"
+                  >
+                    {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                    Tentar Reenviar Mensagem Agora
+                  </Button>
+                </div>
+              )}
+
+              {/* Contact Info Card */}
+              <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                    <User className="h-3.5 w-3.5 text-primary" /> Destinatário
+                  </span>
+                  {selectedItem.contacts?.phone && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleOpenInboxChat(selectedItem.contacts!.phone)}
+                      className="h-7 text-[11px] gap-1 text-primary hover:text-primary"
+                    >
+                      <MessageSquare className="h-3 w-3" /> Abrir no Inbox <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground text-[10px]">Nome:</span>
+                    <p className="font-medium text-foreground">{selectedItem.contacts?.nome || "Contato"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-[10px]">Telefone:</span>
+                    <p className="font-mono font-medium text-foreground">{selectedItem.contacts?.phone || "Sem Número"}</p>
+                  </div>
+                </div>
+
+                {selectedItem.campaigns?.nome && (
+                  <div className="pt-1 border-t border-border/40">
+                    <span className="text-muted-foreground text-[10px]">Campanha:</span>
+                    <p className="font-medium text-foreground">{selectedItem.campaigns.nome}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Full Message Text Box */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" /> Texto Completo da Mensagem:
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleCopyMessage(selectedItem.mensagem_final)}
+                    className="h-6 text-[10px] gap-1 px-2"
+                  >
+                    {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                    {copied ? "Copiado!" : "Copiar Texto"}
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border border-border bg-muted/30 p-3 font-sans text-xs whitespace-pre-wrap leading-relaxed text-foreground max-h-48 overflow-y-auto">
+                  {selectedItem.mensagem_final}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSelectedItem(null)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

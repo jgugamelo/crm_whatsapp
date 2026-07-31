@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     const campaignIds = Array.from(new Set((queueData ?? []).map((q) => q.campaign_id).filter(Boolean)));
 
     const { data: contactsList } = contactIds.length > 0
-      ? await supabaseAdmin.from("contacts").select("id, name, phone").in("id", contactIds)
+      ? await supabaseAdmin.from("contacts").select("id, name, phone, email").in("id", contactIds)
       : { data: [] };
 
     const { data: campaignsList } = campaignIds.length > 0
@@ -86,16 +86,17 @@ export async function GET(request: Request) {
     const mappedQueue = (queueData ?? []).map((q) => ({
       id: q.id,
       campaign_id: q.campaign_id,
+      contact_id: q.contact_id,
       mensagem_final: q.mensagem_final,
       status: q.status,
       scheduled_at: q.scheduled_at,
       sent_at: q.processed_at,
       erro: q.error_message,
       contacts: contactsMap[q.contact_id]
-        ? { nome: contactsMap[q.contact_id].name, phone: contactsMap[q.contact_id].phone }
+        ? { id: contactsMap[q.contact_id].id, nome: contactsMap[q.contact_id].name, phone: contactsMap[q.contact_id].phone, email: contactsMap[q.contact_id].email }
         : undefined,
       campaigns: campaignsMap[q.campaign_id]
-        ? { nome: campaignsMap[q.campaign_id].nome }
+        ? { id: campaignsMap[q.campaign_id].id, nome: campaignsMap[q.campaign_id].nome }
         : undefined,
     }));
 
@@ -116,6 +117,47 @@ export async function GET(request: Request) {
     return NextResponse.json({ queue: mappedQueue, stats });
   } catch (err: any) {
     console.error("Error in GET /api/disparador/queue:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const supabaseUser = await createServerClient();
+    const {
+      data: { user },
+    } = await supabaseUser.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { queueId } = await request.json();
+    if (!queueId) {
+      return NextResponse.json({ error: "queueId is required" }, { status: 400 });
+    }
+
+    // Reset failed or pending item back to agendado
+    const { error } = await supabaseAdmin
+      .from("disp_message_queue")
+      .update({
+        status: "agendado",
+        error_message: null,
+        processed_at: null,
+        scheduled_at: new Date().toISOString(),
+      })
+      .eq("id", queueId);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Trigger queue worker immediately
+    processQueueBatch().catch((err) => console.error("[POST /api/disparador/queue] Retry worker error:", err));
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Error in POST /api/disparador/queue (retry):", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
