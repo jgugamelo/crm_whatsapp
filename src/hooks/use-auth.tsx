@@ -157,12 +157,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error("[AuthProvider] fetchProfile error:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
+        console.warn("[AuthProvider] fetchProfile error, attempting fallback without include_agent_name:", error.message);
+        const { data: fallbackData } = await supabase
+          .from("profiles")
+          .select(
+            "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
+          )
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (fallbackData) {
+          data = { ...fallbackData, include_agent_name: false } as any;
+        }
       }
 
       // If profile is missing, attempt to bootstrap it from auth.getUser() metadata

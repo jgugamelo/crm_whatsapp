@@ -144,17 +144,20 @@ export function ProfileForm() {
         nextAvatarUrl = null;
       }
 
-      // Persist name + avatar + agent signature setting to profiles.
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
+      // Persist name + avatar + agent signature setting via /api/account/profile.
+      const res = await fetch('/api/account/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           full_name: trimmedName,
           avatar_url: nextAvatarUrl,
           include_agent_name: includeAgentName,
-        })
-        .eq('user_id', user.id);
-      if (updateError) {
-        throw new Error(`Save failed: ${updateError.message}`);
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Erro ao salvar perfil');
       }
 
       // Email change goes through Supabase Auth, which emails a
