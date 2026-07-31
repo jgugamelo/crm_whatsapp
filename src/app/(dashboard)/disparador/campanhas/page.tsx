@@ -19,7 +19,9 @@ import {
   X,
   FileText,
   ArrowLeft,
-  Kanban
+  Kanban,
+  Pencil,
+  RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -234,7 +236,27 @@ export default function CampanhasPage() {
     }
   };
 
-  // Submit Form
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+
+  const handleEdit = (c: Campaign) => {
+    setEditingCampaignId(c.id);
+    setNome(c.nome || "");
+    setDescricao(c.descricao || "");
+    setObjetivo(c.objetivo || "");
+    setSelectedSessions(c.session_ids || []);
+    setSelectedTags(c.tags_filtro || []);
+    setSelectedPipelineId(c.pipeline_id || "");
+    setSelectedStageIds(c.stage_ids || []);
+    setMensagens(c.mensagens && c.mensagens.length > 0 ? c.mensagens : [{ tipo: "texto", conteudo: "" }]);
+    setIntervaloMin(c.intervalo_min || 30);
+    setIntervaloMax(c.intervalo_max || 60);
+    setJanelaInicio(c.janela_inicio || "08:00");
+    setJanelaFim(c.janela_fim || "18:00");
+    setIniciarImediatamente(true);
+    setShowModal(true);
+  };
+
+  // Submit Form (Create or Edit)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim()) {
@@ -251,8 +273,13 @@ export default function CampanhasPage() {
     }
 
     try {
-      const res = await fetch("/api/disparador/campaigns", {
-        method: "POST",
+      const url = editingCampaignId
+        ? `/api/disparador/campaigns/${editingCampaignId}`
+        : "/api/disparador/campaigns";
+      const method = editingCampaignId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           account_id: accountId,
@@ -274,19 +301,20 @@ export default function CampanhasPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Erro ao criar campanha.");
+        throw new Error(data.error || "Erro ao salvar campanha.");
       }
 
-      toast.success(data.message || "Campanha processada com sucesso!");
+      toast.success(data.message || "Campanha salva com sucesso!");
       setShowModal(false);
       resetForm();
       loadData();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao criar campanha");
+      toast.error(err.message || "Erro ao salvar campanha");
     }
   };
 
   const resetForm = () => {
+    setEditingCampaignId(null);
     setNome("");
     setDescricao("");
     setObjetivo("");
@@ -323,7 +351,7 @@ export default function CampanhasPage() {
             Gerencie disparos agendados em lote e acompanhe o processamento no servidor.
           </p>
         </div>
-        <Button onClick={() => setShowModal(true)} className="gap-1.5 self-start">
+        <Button onClick={() => { resetForm(); setShowModal(true); }} className="gap-1.5 self-start">
           <Plus className="h-4 w-4" /> Nova Campanha
         </Button>
       </div>
@@ -374,22 +402,36 @@ export default function CampanhasPage() {
 
                 {/* Actions row */}
                 <div className="flex justify-between items-center pt-3 border-t border-border/40">
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 flex-wrap">
                     {c.status === "em_execucao" ? (
                       <Button size="sm" variant="outline" onClick={() => handlePause(c.id)} className="h-8 gap-1 text-xs">
                         <Pause className="h-3.5 w-3.5" /> Pausar
                       </Button>
+                    ) : c.status === "pausada" ? (
+                      <Button size="sm" onClick={() => handleStart(c.id)} className="h-8 gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
+                        <Play className="h-3.5 w-3.5" /> Continuar
+                      </Button>
+                    ) : c.status === "encerrada" ? (
+                      <Button size="sm" onClick={() => handleStart(c.id)} className="h-8 gap-1 text-xs text-primary border-primary/30 hover:bg-primary/10" variant="outline" title="Reativar envio sem duplicar mensagens já enviadas">
+                        <RotateCcw className="h-3.5 w-3.5" /> Reativar
+                      </Button>
                     ) : (
-                      <Button size="sm" onClick={() => handleStart(c.id)} disabled={c.status === "encerrada"} className="h-8 gap-1 text-xs">
+                      <Button size="sm" onClick={() => handleStart(c.id)} className="h-8 gap-1 text-xs">
                         <Play className="h-3.5 w-3.5" /> Iniciar
                       </Button>
                     )}
-                    {c.status === "em_execucao" || c.status === "pausada" ? (
-                      <Button size="sm" variant="outline" onClick={() => handleStop(c.id)} className="h-8 text-xs">
+
+                    <Button size="sm" variant="outline" onClick={() => handleEdit(c)} className="h-8 gap-1 text-xs">
+                      <Pencil className="h-3.5 w-3.5" /> Editar
+                    </Button>
+
+                    {(c.status === "em_execucao" || c.status === "pausada") && (
+                      <Button size="sm" variant="outline" onClick={() => handleStop(c.id)} className="h-8 text-xs text-muted-foreground">
                         Encerrar
                       </Button>
-                    ) : null}
+                    )}
                   </div>
+
                   <Button size="icon" variant="ghost" onClick={() => handleDelete(c.id)} className="h-8 w-8 text-red-500 hover:text-red-600">
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -400,12 +442,14 @@ export default function CampanhasPage() {
         )}
       </div>
 
-      {/* Creation Modal */}
+      {/* Creation/Editing Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-card border border-border w-full max-w-2xl rounded-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
             <header className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
-              <h3 className="font-bold text-foreground">Nova Campanha de Disparo</h3>
+              <h3 className="font-bold text-foreground">
+                {editingCampaignId ? "Editar Campanha de Disparo" : "Nova Campanha de Disparo"}
+              </h3>
               <Button size="icon" variant="ghost" onClick={() => setShowModal(false)} className="h-8 w-8 text-muted-foreground">
                 <X className="h-5 w-5" />
               </Button>

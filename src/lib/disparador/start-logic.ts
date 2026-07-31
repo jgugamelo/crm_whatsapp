@@ -123,6 +123,41 @@ export async function startCampaignLogic(campaignId: string) {
     throw new Error("Nenhum contato encontrado com os filtros de tags e funil selecionados.");
   }
 
+  // Exclude contacts that ALREADY received messages for this campaign (prevent duplicates upon restart/edit)
+  const { data: sentQueueItems } = await supabaseAdmin
+    .from("disp_message_queue")
+    .select("contact_id")
+    .eq("campaign_id", campaignId)
+    .eq("status", "enviado");
+
+  const sentContactIdsSet = new Set((sentQueueItems ?? []).map((s) => s.contact_id).filter(Boolean));
+
+  const { data: sentLogItems } = await supabaseAdmin
+    .from("message_logs")
+    .select("contact_id")
+    .eq("campaign_id", campaignId)
+    .eq("status", "enviado");
+
+  if (sentLogItems) {
+    sentLogItems.forEach((l) => {
+      if (l.contact_id) sentContactIdsSet.add(l.contact_id);
+    });
+  }
+
+  if (sentContactIdsSet.size > 0) {
+    const totalBefore = contacts.length;
+    contacts = contacts.filter((c) => !sentContactIdsSet.has(c.id));
+    console.log(`[startCampaignLogic] Skipped ${sentContactIdsSet.size} already-sent contacts. Remaining: ${contacts.length} of ${totalBefore}`);
+  }
+
+  if (contacts.length === 0) {
+    await supabaseAdmin
+      .from("campaigns")
+      .update({ status: "encerrada", updated_at: now })
+      .eq("id", campaignId);
+    throw new Error("Todos os contatos desta campanha já receberam as mensagens.");
+  }
+
   // Fetch Blacklist to skip (filtered by account)
   const { data: blacklist } = await supabaseAdmin
     .from("blacklist")
