@@ -14,6 +14,12 @@ export async function GET(request: Request) {
   try {
     ensureQueueWorkerRunning();
     processQueueBatch().catch((err) => console.error("[GET /api/disparador/queue] Worker batch error:", err));
+
+    const { searchParams } = new URL(request.url);
+    const statusParam = searchParams.get("status");
+    const limitParam = parseInt(searchParams.get("limit") || "500", 10);
+    const limit = Math.min(Math.max(limitParam, 10), 1000);
+
     const supabaseUser = await createServerClient();
     const {
       data: { user },
@@ -35,8 +41,8 @@ export async function GET(request: Request) {
 
     const accountId = profile.account_id;
 
-    // Load recent 15 queue logs
-    const { data: queueData } = await supabaseAdmin
+    // Base query for queue items
+    let query = supabaseAdmin
       .from("disp_message_queue")
       .select(`
         id,
@@ -48,9 +54,20 @@ export async function GET(request: Request) {
         error_message,
         contact_id
       `)
-      .eq("account_id", accountId)
+      .eq("account_id", accountId);
+
+    if (statusParam && statusParam !== "todos") {
+      if (statusParam === "enviando") {
+        query = query.in("status", ["enviando", "pendente"]);
+      } else {
+        query = query.eq("status", statusParam);
+      }
+    }
+
+    // Load queue logs with configurable limit up to 1000 items
+    const { data: queueData } = await query
       .order("scheduled_at", { ascending: false })
-      .limit(15);
+      .limit(limit);
 
     const contactIds = Array.from(new Set((queueData ?? []).map((q) => q.contact_id).filter(Boolean)));
     const campaignIds = Array.from(new Set((queueData ?? []).map((q) => q.campaign_id).filter(Boolean)));
@@ -82,7 +99,7 @@ export async function GET(request: Request) {
         : undefined,
     }));
 
-    // Stats calculation
+    // Stats calculation across all queue messages
     const { data: allStats } = await supabaseAdmin
       .from("disp_message_queue")
       .select("status")
@@ -98,7 +115,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ queue: mappedQueue, stats });
   } catch (err: any) {
-    console.error("[GET /api/disparador/queue] Error:", err);
-    return NextResponse.json({ queue: [], stats: { scheduled: 0, sending: 0, success: 0, failed: 0 } });
+    console.error("Error in GET /api/disparador/queue:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
