@@ -315,8 +315,10 @@ export function ProfileForm() {
                     </Label>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Adiciona automaticamente seu nome no início de cada mensagem enviada no WhatsApp (ex:{' '}
-                    <span className="font-mono font-medium text-primary">*{(fullName || 'Atendente').split(' ')[0]}:* Olá! Como posso ajudar?</span>).
+                    Adiciona automaticamente seu nome no início de cada mensagem enviada no WhatsApp no padrão:<br />
+                    <span className="inline-block mt-1 font-mono text-[11px] font-medium text-primary bg-primary/10 px-2.5 py-1.5 rounded border border-primary/20 whitespace-pre-line">
+                      {`*${fullName || 'Lucas Tulio'}:*\n\nUm momento por favor.`}
+                    </span>
                   </p>
                 </div>
                 <Switch

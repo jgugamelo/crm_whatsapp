@@ -85,17 +85,18 @@ export async function POST(request: Request) {
       waha_session,
     } = body
 
-    // Agent Signature: if profile has `include_agent_name` enabled, prepend "*AgentName:* "
+    // Agent Signature: if profile has `include_agent_name` enabled, prepend "*AgentName:*\n\n"
     if (
       profile?.include_agent_name &&
       typeof content_text === 'string' &&
       content_text.trim()
     ) {
       const agentName = profile.full_name?.trim() || 'Atendente'
-      const prefix = `*${agentName}:* `
+      const prefix = `*${agentName}:*\n\n`
       if (
         !content_text.startsWith(prefix) &&
-        !content_text.startsWith(`*${agentName}*`)
+        !content_text.startsWith(`*${agentName}:*`) &&
+        !content_text.startsWith(`${agentName}:`)
       ) {
         content_text = `${prefix}${content_text}`
       }
