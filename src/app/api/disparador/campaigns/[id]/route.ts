@@ -65,14 +65,28 @@ export async function PUT(
     if (janela_fim !== undefined) updates.janela_fim = janela_fim;
     if (max_disparos_sem_resposta !== undefined) updates.max_disparos_sem_resposta = max_disparos_sem_resposta;
 
-    const { data: updatedCampaign, error } = await supabaseAdmin
+    let updatedCampaign = null;
+    let { data: firstTryData, error } = await supabaseAdmin
       .from("campaigns")
       .update(updates)
       .eq("id", id)
       .select()
       .single();
 
+    if (error && error.message?.includes("max_disparos_sem_resposta")) {
+      delete updates.max_disparos_sem_resposta;
+      const retry = await supabaseAdmin
+        .from("campaigns")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      firstTryData = retry.data;
+      error = retry.error;
+    }
+
     if (error) throw error;
+    updatedCampaign = firstTryData;
 
     let startResult = null;
     if (iniciar_imediatamente) {

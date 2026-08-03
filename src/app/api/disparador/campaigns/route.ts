@@ -136,10 +136,22 @@ export async function POST(request: Request) {
       status: "rascunho",
     };
 
-    const { data: createdRows, error: insertError } = await supabaseAdmin
+    let createdRows = null;
+    let { data: firstTryRows, error: insertError } = await supabaseAdmin
       .from("campaigns")
       .insert(campaignData)
       .select("*");
+
+    if (insertError && insertError.message?.includes("max_disparos_sem_resposta")) {
+      console.warn("[POST /api/disparador/campaigns] max_disparos_sem_resposta column not found in schema cache. Retrying without it...");
+      delete (campaignData as any).max_disparos_sem_resposta;
+      const retry = await supabaseAdmin
+        .from("campaigns")
+        .insert(campaignData)
+        .select("*");
+      firstTryRows = retry.data;
+      insertError = retry.error;
+    }
 
     if (insertError) {
       console.error("[POST /api/disparador/campaigns] Insert error:", insertError);
@@ -148,6 +160,8 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+
+    createdRows = firstTryRows;
 
     const newCampaign = createdRows?.[0];
 
