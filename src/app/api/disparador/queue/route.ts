@@ -146,57 +146,66 @@ export async function GET(request: Request) {
       .order("scheduled_at", { ascending: false })
       .limit(limit);
 
-    const contactIds = Array.from(new Set((queueData ?? []).map((q) => q.contact_id).filter(Boolean)));
-    const campaignIds = Array.from(new Set((queueData ?? []).map((q) => q.campaign_id).filter(Boolean)));
+    // Load ALL contacts belonging to this account to guarantee 100% resolution by ID or Name
+    const { data: allAccountContacts } = await supabaseAdmin
+      .from("contacts")
+      .select("*")
+      .eq("account_id", accountId);
 
-    let contactsList: any[] = [];
-    if (contactIds.length > 0) {
-      // 1. Fetch from wacrm.contacts
-      const { data: wacrmContacts } = await supabaseAdmin
+    const contactsMap: Record<string, any> = {};
+    const contactsByNameMap: Record<string, any> = {};
+
+    (allAccountContacts ?? []).forEach((c: any) => {
+      const formatted = {
+        id: c.id,
+        nome: c.name || c.nome || c.full_name || "Contato",
+        phone: c.phone || c.telefone || c.number || "Sem Número",
+        email: c.email || "",
+      };
+      if (c.id) contactsMap[c.id] = formatted;
+      if (formatted.nome && formatted.nome !== "Contato") {
+        contactsByNameMap[formatted.nome.trim().toLowerCase()] = formatted;
+      }
+    });
+
+    // Also fetch by contactIds if any exist outside account_id filter
+    const contactIds = Array.from(new Set((queueData ?? []).map((q) => q.contact_id).filter(Boolean)));
+    const missingIds = contactIds.filter((id) => !contactsMap[id]);
+
+    if (missingIds.length > 0) {
+      const { data: extraContacts } = await supabaseAdmin
         .from("contacts")
         .select("*")
-        .in("id", contactIds);
+        .in("id", missingIds);
 
-      if (wacrmContacts) contactsList.push(...wacrmContacts);
-
-      // Check if any contactIds were missed (e.g. stored in public schema or missing RLS)
-      const foundIds = new Set(contactsList.map((c) => c.id));
-      const missingIds = contactIds.filter((id) => !foundIds.has(id));
-
-      if (missingIds.length > 0) {
-        const publicClient = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-          process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-        );
-        const { data: pubContacts } = await publicClient
-          .from("contacts")
-          .select("*")
-          .in("id", missingIds);
-
-        if (pubContacts) contactsList.push(...pubContacts);
-      }
-    }
-
-    const { data: campaignsList } = campaignIds.length > 0
-      ? await supabaseAdmin.from("campaigns").select("id, nome").in("id", campaignIds)
-      : { data: [] };
-
-    const contactsMap: Record<string, any> = Object.fromEntries(
-      contactsList.map((c: any) => [
-        c.id,
-        {
+      (extraContacts ?? []).forEach((c: any) => {
+        const formatted = {
           id: c.id,
           nome: c.name || c.nome || c.full_name || "Contato",
           phone: c.phone || c.telefone || c.number || "Sem Número",
           email: c.email || "",
-        },
-      ])
-    );
+        };
+        if (c.id) contactsMap[c.id] = formatted;
+        if (formatted.nome && formatted.nome !== "Contato") {
+          contactsByNameMap[formatted.nome.trim().toLowerCase()] = formatted;
+        }
+      });
+    }
+
+    const campaignIds = Array.from(new Set((queueData ?? []).map((q) => q.campaign_id).filter(Boolean)));
+    const { data: campaignsList } = campaignIds.length > 0
+      ? await supabaseAdmin.from("campaigns").select("id, nome").in("id", campaignIds)
+      : { data: [] };
     const campaignsMap: Record<string, any> = Object.fromEntries((campaignsList ?? []).map((c) => [c.id, c]));
 
     const mappedQueue = (queueData ?? []).map((q) => {
-      const contactObj = contactsMap[q.contact_id];
       const extractedName = extractContactNameFromMessage(q.mensagem_final);
+      let contactObj = contactsMap[q.contact_id];
+
+      // If contactObj is missing by ID, try matching by extracted name
+      if (!contactObj && extractedName) {
+        contactObj = contactsByNameMap[extractedName.trim().toLowerCase()];
+      }
 
       const resolvedName = (contactObj?.nome && contactObj.nome !== "Contato")
         ? contactObj.nome
@@ -209,7 +218,7 @@ export async function GET(request: Request) {
       return {
         id: q.id,
         campaign_id: q.campaign_id,
-        contact_id: q.contact_id,
+        contact_id: q.contact_id || contactObj?.id,
         mensagem_final: q.mensagem_final,
         status: q.status,
         scheduled_at: q.scheduled_at,
