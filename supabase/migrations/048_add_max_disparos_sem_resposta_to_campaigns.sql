@@ -1,14 +1,10 @@
--- Migration 048: Adicionar coluna max_disparos_sem_resposta para filtro anti-ban na tabela campaigns
+-- Migration 048: Adicionar coluna max_disparos_sem_resposta e recriar view publica
 ALTER TABLE wacrm.campaigns 
 ADD COLUMN IF NOT EXISTS max_disparos_sem_resposta INTEGER DEFAULT 3;
 
--- Atualizar schema público caso haja views
-DO $$ 
-BEGIN 
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'campaigns') THEN
-    ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS max_disparos_sem_resposta INTEGER DEFAULT 3;
-  END IF;
-END $$;
+-- Recriar view publica para incluir a nova coluna
+CREATE OR REPLACE VIEW public.campaigns AS SELECT * FROM wacrm.campaigns;
+GRANT ALL ON public.campaigns TO anon, authenticated, service_role;
 
--- Recarregar cache de schema do PostgREST / Supabase
+-- Notificar PostgREST para atualizar o cache de schema
 NOTIFY pgrst, 'reload schema';
