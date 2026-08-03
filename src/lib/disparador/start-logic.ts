@@ -156,12 +156,59 @@ export async function startCampaignLogic(campaignId: string) {
     console.log(`[startCampaignLogic] Skipped ${sentContactIdsSet.size} already-sent contacts. Remaining: ${contacts.length} of ${totalBefore}`);
   }
 
+  // Apply Anti-Ban Risk Filter: Exclude contacts who have received X or more broadcasts without ever replying
+  const maxDisparos = campaign.max_disparos_sem_resposta !== undefined && campaign.max_disparos_sem_resposta !== null
+    ? Number(campaign.max_disparos_sem_resposta)
+    : null;
+
+  if (maxDisparos !== null && maxDisparos > 0 && contacts.length > 0) {
+    const contactIdsList = contacts.map((c) => c.id);
+
+    // Fetch previous broadcasts sent per contact
+    const { data: previousBroadcasts } = await supabaseAdmin
+      .from("disp_message_queue")
+      .select("contact_id")
+      .in("contact_id", contactIdsList)
+      .eq("status", "enviado");
+
+    const broadcastCountMap: Record<string, number> = {};
+    (previousBroadcasts ?? []).forEach((row) => {
+      if (row.contact_id) {
+        broadcastCountMap[row.contact_id] = (broadcastCountMap[row.contact_id] || 0) + 1;
+      }
+    });
+
+    // Fetch contacts that have ever sent a customer reply message in conversations
+    const { data: repliedMessages } = await supabaseAdmin
+      .from("messages")
+      .select("conversations!inner(contact_id)")
+      .eq("direcao", "entrada");
+
+    const repliedContactIdsSet = new Set<string>();
+    (repliedMessages ?? []).forEach((row: any) => {
+      const cId = row.conversations?.contact_id;
+      if (cId) repliedContactIdsSet.add(cId);
+    });
+
+    const beforeRiskFilter = contacts.length;
+    contacts = contacts.filter((c) => {
+      // If contact has ever replied to us, they are engaged and safe!
+      if (repliedContactIdsSet.has(c.id)) return true;
+
+      // Otherwise check if total unanswered broadcasts received is less than maxDisparos limit
+      const countSent = broadcastCountMap[c.id] || 0;
+      return countSent < maxDisparos;
+    });
+
+    console.log(`[startCampaignLogic] Anti-ban risk filter applied (max ${maxDisparos} unanswered broadcasts). Excluded ${beforeRiskFilter - contacts.length} high-risk contacts. Remaining: ${contacts.length}`);
+  }
+
   if (contacts.length === 0) {
     await supabaseAdmin
       .from("campaigns")
       .update({ status: "encerrada", updated_at: now })
       .eq("id", campaignId);
-    throw new Error("Todos os contatos desta campanha já receberam as mensagens.");
+    throw new Error("Todos os contatos filtrados desta campanha já receberam as mensagens ou excederam o limite de risco anti-ban.");
   }
 
   // Fetch Blacklist to skip (filtered by account)

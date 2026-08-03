@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       intervalo_max = 60,
       janela_inicio = "08:00",
       janela_fim = "18:00",
+      max_disparos_sem_resposta = null,
       iniciar_imediatamente = true,
       account_id: providedAccountId,
     } = body;
@@ -131,6 +132,7 @@ export async function POST(request: Request) {
       intervalo_max,
       janela_inicio,
       janela_fim,
+      max_disparos_sem_resposta: max_disparos_sem_resposta !== undefined ? max_disparos_sem_resposta : null,
       status: "rascunho",
     };
 

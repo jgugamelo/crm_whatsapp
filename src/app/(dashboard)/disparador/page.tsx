@@ -21,7 +21,8 @@ import {
   User,
   Phone,
   Mail,
-  Check
+  Check,
+  CalendarClock
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -87,6 +88,50 @@ export default function DisparadorDashboardPage() {
   const [selectedItem, setSelectedItem] = useState<QueueLog | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
+  const [followUpText, setFollowUpText] = useState("");
+  const [followUpDelayHours, setFollowUpDelayHours] = useState(24);
+  const [followUpSubmitting, setFollowUpSubmitting] = useState(false);
+
+  const handleOpenFollowUpModal = () => {
+    if (!selectedItem) return;
+    const name = selectedItem.contacts?.nome ? selectedItem.contacts.nome.split(" ")[0] : "Cliente";
+    setFollowUpText(`Olá ${name}, passando para dar um breve retorno sobre a mensagem anterior. Teve oportunidade de visualizar?`);
+    setFollowUpDelayHours(24);
+    setFollowUpModalOpen(true);
+  };
+
+  const handleScheduleFollowUp = async () => {
+    if (!selectedItem?.contact_id || !followUpText.trim()) {
+      toast.error("Preencha o texto do follow-up.");
+      return;
+    }
+    setFollowUpSubmitting(true);
+    try {
+      const res = await fetch("/api/disparador/queue/followup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: selectedItem.contact_id,
+          campaignId: selectedItem.campaign_id,
+          messageText: followUpText,
+          delayHours: followUpDelayHours,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao agendar follow-up.");
+
+      toast.success(data.message || "Follow-up agendado com sucesso!");
+      setFollowUpModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Falha ao agendar follow-up");
+    } finally {
+      setFollowUpSubmitting(false);
+    }
+  };
 
   const [stats, setStats] = useState({
     scheduled: 0,
@@ -543,9 +588,72 @@ export default function DisparadorDashboardPage() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex items-center justify-between gap-2 sm:gap-0">
+            {selectedItem?.contact_id && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleOpenFollowUpModal}
+                className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10 mr-auto"
+              >
+                <CalendarClock className="h-3.5 w-3.5" /> Agendar Follow-up
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setSelectedItem(null)}>
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Follow-up Scheduling Modal */}
+      <Dialog open={followUpModalOpen} onOpenChange={setFollowUpModalOpen}>
+        <DialogContent className="max-w-md border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <CalendarClock className="h-4 w-4 text-primary" /> Agendar Follow-up Personalizado
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Agende uma nova mensagem de acompanhamento para {selectedItem?.contacts?.nome || "este contato"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-xs">
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground">Tempo de Espera (Delay):</label>
+              <select
+                value={followUpDelayHours}
+                onChange={(e) => setFollowUpDelayHours(Number(e.target.value))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+              >
+                <option value={2}>Em 2 Horas</option>
+                <option value={6}>Em 6 Horas</option>
+                <option value={12}>Em 12 Horas</option>
+                <option value={24}>Amanhã neste mesmo horário (24 Horas)</option>
+                <option value={48}>Em 2 Dias (48 Horas)</option>
+                <option value={72}>Em 3 Dias (72 Horas)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground">Mensagem de Follow-up:</label>
+              <textarea
+                rows={4}
+                value={followUpText}
+                onChange={(e) => setFollowUpText(e.target.value)}
+                placeholder="Digite a mensagem de acompanhamento..."
+                className="w-full rounded-md border border-input bg-background p-3 text-xs focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setFollowUpModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" disabled={followUpSubmitting} onClick={handleScheduleFollowUp} className="gap-1.5">
+              {followUpSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Confirmar Agendamento
             </Button>
           </DialogFooter>
         </DialogContent>

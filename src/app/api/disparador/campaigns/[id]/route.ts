@@ -43,6 +43,7 @@ export async function PUT(
       intervalo_max,
       janela_inicio,
       janela_fim,
+      max_disparos_sem_resposta,
       iniciar_imediatamente,
     } = body;
 
@@ -62,6 +63,7 @@ export async function PUT(
     if (intervalo_max !== undefined) updates.intervalo_max = intervalo_max;
     if (janela_inicio !== undefined) updates.janela_inicio = janela_inicio;
     if (janela_fim !== undefined) updates.janela_fim = janela_fim;
+    if (max_disparos_sem_resposta !== undefined) updates.max_disparos_sem_resposta = max_disparos_sem_resposta;
 
     const { data: updatedCampaign, error } = await supabaseAdmin
       .from("campaigns")

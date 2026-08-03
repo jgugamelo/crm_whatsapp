@@ -21,7 +21,8 @@ import {
   ArrowLeft,
   Kanban,
   Pencil,
-  RotateCcw
+  RotateCcw,
+  ShieldAlert
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -100,6 +101,7 @@ export default function CampanhasPage() {
   const [intervaloMax, setIntervaloMax] = useState(60);
   const [janelaInicio, setJanelaInicio] = useState("08:00");
   const [janelaFim, setJanelaFim] = useState("18:00");
+  const [maxDisparosSemResposta, setMaxDisparosSemResposta] = useState<number | "">(3);
   const [iniciarImediatamente, setIniciarImediatamente] = useState(true);
   const [mensagens, setMensagens] = useState<any[]>([{ tipo: "texto", conteudo: "" }]);
 
@@ -252,6 +254,7 @@ export default function CampanhasPage() {
     setIntervaloMax(c.intervalo_max || 60);
     setJanelaInicio(c.janela_inicio || "08:00");
     setJanelaFim(c.janela_fim || "18:00");
+    setMaxDisparosSemResposta((c as any).max_disparos_sem_resposta ?? 3);
     setIniciarImediatamente(true);
     setShowModal(true);
   };
@@ -295,6 +298,7 @@ export default function CampanhasPage() {
           intervalo_max: intervaloMax,
           janela_inicio: janelaInicio,
           janela_fim: janelaFim,
+          max_disparos_sem_resposta: maxDisparosSemResposta === "" ? null : Number(maxDisparosSemResposta),
           iniciar_imediatamente: iniciarImediatamente,
         }),
       });
@@ -325,6 +329,7 @@ export default function CampanhasPage() {
     setMensagens([{ tipo: "texto", conteudo: "" }]);
     setIntervaloMin(30);
     setIntervaloMax(60);
+    setMaxDisparosSemResposta(3);
   };
 
   return (
@@ -632,6 +637,27 @@ export default function CampanhasPage() {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Anti-Ban & Unresponsive Lead Protection Filter */}
+              <div className="space-y-1.5 border-t border-border/40 pt-3">
+                <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                  <ShieldAlert className="h-4 w-4 text-amber-500" /> Proteção Anti-Ban & Filtro de Disparos sem Resposta
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  Evite o banimento de suas linhas ignorando contatos que não responderam a múltiplos disparos anteriores.
+                </p>
+                <select
+                  value={maxDisparosSemResposta}
+                  onChange={(e) => setMaxDisparosSemResposta(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
+                >
+                  <option value="">Sem limite (Enviar para todos os contatos)</option>
+                  <option value="1">Máximo 1 disparo sem resposta (Apenas contatos novos / nunca disparados)</option>
+                  <option value="2">Máximo 2 disparos sem resposta (Segurança Alta 🟢)</option>
+                  <option value="3">Máximo 3 disparos sem resposta (Recomendado 🛡️)</option>
+                  <option value="5">Máximo 5 disparos sem resposta (Ignorar apenas leads de Alto Risco 🔴)</option>
+                </select>
               </div>
 
               {/* Messages bubbles configuration */}

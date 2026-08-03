@@ -382,14 +382,45 @@ export async function processQueueBatch() {
       } catch (itemErr: any) {
         console.error(`[Queue Worker] Error processing item for campaign ${campaign.id}:`, itemErr);
         if (currentItem) {
-          await supabaseAdmin
-            .from("disp_message_queue")
-            .update({
-              status: "erro",
-              error_message: itemErr.message || String(itemErr),
-              attempts: (currentItem.attempts || 0) + 1,
-            })
-            .eq("id", currentItem.id);
+          const currentAttempts = (currentItem.attempts || 0) + 1;
+
+          // Attempt failover line rotation if attempts < 3 and multiple sessions exist
+          let failoverHandled = false;
+          if (currentAttempts < 3) {
+            const { data: alternativeSessions } = await supabaseAdmin
+              .from("whatsapp_config")
+              .select("*")
+              .eq("account_id", campaign.account_id || currentItem.account_id)
+              .eq("provider", "waha")
+              .eq("session_status", "WORKING")
+              .neq("id", currentItem.session_id || "");
+
+            if (alternativeSessions && alternativeSessions.length > 0) {
+              const altConfig = alternativeSessions[0];
+              console.log(`[Queue Worker] Failover line switch: Retrying item ${currentItem.id} on line ${altConfig.waha_session}`);
+              await supabaseAdmin
+                .from("disp_message_queue")
+                .update({
+                  session_id: altConfig.id,
+                  attempts: currentAttempts,
+                  error_message: `Tentativa ${currentAttempts} falhou na linha anterior (${itemErr.message}). Alternado para linha ${altConfig.waha_session}...`,
+                })
+                .eq("id", currentItem.id);
+
+              failoverHandled = true;
+            }
+          }
+
+          if (!failoverHandled) {
+            await supabaseAdmin
+              .from("disp_message_queue")
+              .update({
+                status: "erro",
+                error_message: itemErr.message || String(itemErr),
+                attempts: currentAttempts,
+              })
+              .eq("id", currentItem.id);
+          }
         }
       }
     }
