@@ -33,26 +33,32 @@ export async function startCampaignLogic(campaignId: string) {
     throw new Error("Campanha sem sessões de WhatsApp selecionadas.");
   }
 
-  // 2. Remove previously scheduled/pending items to prevent duplication
+  // 2. Remove previously non-completed queue items (including paused/canceled) to prevent duplicate rows
   await supabaseAdmin
     .from("disp_message_queue")
     .delete()
     .eq("campaign_id", campaignId)
-    .in("status", ["pendente", "agendado", "erro"]);
+    .in("status", ["pendente", "agendado", "erro", "pausado", "cancelado"]);
 
   // 3. Load active contacts belonging to this account
-  const { data: allContacts, error: contactsError } = await supabaseAdmin
+  const { data: rawContacts, error: contactsError } = await supabaseAdmin
     .from("contacts")
-    .select("id, name, phone")
+    .select("id, name, phone, nome, telefone")
     .eq("account_id", campaign.account_id);
 
   if (contactsError) {
     throw new Error(`Erro ao carregar contatos do CRM: ${contactsError.message}`);
   }
 
-  if (!allContacts || allContacts.length === 0) {
+  if (!rawContacts || rawContacts.length === 0) {
     throw new Error("Nenhum contato ativo encontrado no CRM para este disparo.");
   }
+
+  const allContacts = rawContacts.map((c: any) => ({
+    id: c.id,
+    name: c.name || c.nome || "Cliente",
+    phone: c.phone || c.telefone || "",
+  }));
 
   // Load contact tags relation
   const { data: tagsList } = await supabaseAdmin

@@ -137,14 +137,24 @@ export async function GET(request: Request) {
     const campaignIds = Array.from(new Set((queueData ?? []).map((q) => q.campaign_id).filter(Boolean)));
 
     const { data: contactsList } = contactIds.length > 0
-      ? await supabaseAdmin.from("contacts").select("id, name, phone, email").in("id", contactIds)
+      ? await supabaseAdmin.from("contacts").select("id, name, phone, email, nome, telefone").in("id", contactIds)
       : { data: [] };
 
     const { data: campaignsList } = campaignIds.length > 0
       ? await supabaseAdmin.from("campaigns").select("id, nome").in("id", campaignIds)
       : { data: [] };
 
-    const contactsMap: Record<string, any> = Object.fromEntries((contactsList ?? []).map((c) => [c.id, c]));
+    const contactsMap: Record<string, any> = Object.fromEntries(
+      (contactsList ?? []).map((c: any) => [
+        c.id,
+        {
+          id: c.id,
+          nome: c.name || c.nome || "Contato",
+          phone: c.phone || c.telefone || "Sem Número",
+          email: c.email || "",
+        },
+      ])
+    );
     const campaignsMap: Record<string, any> = Object.fromEntries((campaignsList ?? []).map((c) => [c.id, c]));
 
     const mappedQueue = (queueData ?? []).map((q) => ({
@@ -157,7 +167,12 @@ export async function GET(request: Request) {
       sent_at: q.processed_at,
       erro: q.error_message,
       contacts: contactsMap[q.contact_id]
-        ? { id: contactsMap[q.contact_id].id, nome: contactsMap[q.contact_id].name, phone: contactsMap[q.contact_id].phone, email: contactsMap[q.contact_id].email }
+        ? {
+            id: contactsMap[q.contact_id].id,
+            nome: contactsMap[q.contact_id].nome,
+            phone: contactsMap[q.contact_id].phone,
+            email: contactsMap[q.contact_id].email,
+          }
         : undefined,
       campaigns: campaignsMap[q.campaign_id]
         ? { id: campaignsMap[q.campaign_id].id, nome: campaignsMap[q.campaign_id].nome }
