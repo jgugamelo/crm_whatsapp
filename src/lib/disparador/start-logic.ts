@@ -43,7 +43,7 @@ export async function startCampaignLogic(campaignId: string) {
   // 3. Load active contacts belonging to this account
   const { data: rawContacts, error: contactsError } = await supabaseAdmin
     .from("contacts")
-    .select("id, name, phone, nome, telefone")
+    .select("*")
     .eq("account_id", campaign.account_id);
 
   if (contactsError) {

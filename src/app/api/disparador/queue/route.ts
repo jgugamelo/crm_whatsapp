@@ -137,7 +137,7 @@ export async function GET(request: Request) {
     const campaignIds = Array.from(new Set((queueData ?? []).map((q) => q.campaign_id).filter(Boolean)));
 
     const { data: contactsList } = contactIds.length > 0
-      ? await supabaseAdmin.from("contacts").select("id, name, phone, email, nome, telefone").in("id", contactIds)
+      ? await supabaseAdmin.from("contacts").select("*").in("id", contactIds)
       : { data: [] };
 
     const { data: campaignsList } = campaignIds.length > 0
