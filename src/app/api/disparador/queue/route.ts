@@ -71,6 +71,19 @@ async function sanitizeQueueScheduledTimes(accountId: string) {
   }
 }
 
+function extractContactNameFromMessage(text: string): string | null {
+  if (!text) return null;
+  // Match patterns like "PARABÉNS, ROSILENE RODRIGUES CASTELLO BRANCO!" or "Olá ROSILENE!"
+  const match = text.match(/(?:PARABÉNS,?\s+|Olá,?\s+|Oi,?\s+|Prezado\(a\),?\s+)([A-ZÁÉÍÓÚÂÊÔÃÕÇa-záéíóúâêôãõç\s]{3,50})(?:!|\.|\n|$)/i);
+  if (match && match[1]) {
+    const candidate = match[1].trim();
+    if (candidate.length >= 3 && !candidate.toLowerCase().includes("você") && !candidate.toLowerCase().includes("seja")) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export async function GET(request: Request) {
   try {
     ensureQueueWorkerRunning();
@@ -136,48 +149,83 @@ export async function GET(request: Request) {
     const contactIds = Array.from(new Set((queueData ?? []).map((q) => q.contact_id).filter(Boolean)));
     const campaignIds = Array.from(new Set((queueData ?? []).map((q) => q.campaign_id).filter(Boolean)));
 
-    const { data: contactsList } = contactIds.length > 0
-      ? await supabaseAdmin.from("contacts").select("*").in("id", contactIds)
-      : { data: [] };
+    let contactsList: any[] = [];
+    if (contactIds.length > 0) {
+      // 1. Fetch from wacrm.contacts
+      const { data: wacrmContacts } = await supabaseAdmin
+        .from("contacts")
+        .select("*")
+        .in("id", contactIds);
+
+      if (wacrmContacts) contactsList.push(...wacrmContacts);
+
+      // Check if any contactIds were missed (e.g. stored in public schema or missing RLS)
+      const foundIds = new Set(contactsList.map((c) => c.id));
+      const missingIds = contactIds.filter((id) => !foundIds.has(id));
+
+      if (missingIds.length > 0) {
+        const publicClient = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+          process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+        );
+        const { data: pubContacts } = await publicClient
+          .from("contacts")
+          .select("*")
+          .in("id", missingIds);
+
+        if (pubContacts) contactsList.push(...pubContacts);
+      }
+    }
 
     const { data: campaignsList } = campaignIds.length > 0
       ? await supabaseAdmin.from("campaigns").select("id, nome").in("id", campaignIds)
       : { data: [] };
 
     const contactsMap: Record<string, any> = Object.fromEntries(
-      (contactsList ?? []).map((c: any) => [
+      contactsList.map((c: any) => [
         c.id,
         {
           id: c.id,
-          nome: c.name || c.nome || "Contato",
-          phone: c.phone || c.telefone || "Sem Número",
+          nome: c.name || c.nome || c.full_name || "Contato",
+          phone: c.phone || c.telefone || c.number || "Sem Número",
           email: c.email || "",
         },
       ])
     );
     const campaignsMap: Record<string, any> = Object.fromEntries((campaignsList ?? []).map((c) => [c.id, c]));
 
-    const mappedQueue = (queueData ?? []).map((q) => ({
-      id: q.id,
-      campaign_id: q.campaign_id,
-      contact_id: q.contact_id,
-      mensagem_final: q.mensagem_final,
-      status: q.status,
-      scheduled_at: q.scheduled_at,
-      sent_at: q.processed_at,
-      erro: q.error_message,
-      contacts: contactsMap[q.contact_id]
-        ? {
-            id: contactsMap[q.contact_id].id,
-            nome: contactsMap[q.contact_id].nome,
-            phone: contactsMap[q.contact_id].phone,
-            email: contactsMap[q.contact_id].email,
-          }
-        : undefined,
-      campaigns: campaignsMap[q.campaign_id]
-        ? { id: campaignsMap[q.campaign_id].id, nome: campaignsMap[q.campaign_id].nome }
-        : undefined,
-    }));
+    const mappedQueue = (queueData ?? []).map((q) => {
+      const contactObj = contactsMap[q.contact_id];
+      const extractedName = extractContactNameFromMessage(q.mensagem_final);
+
+      const resolvedName = (contactObj?.nome && contactObj.nome !== "Contato")
+        ? contactObj.nome
+        : (extractedName || contactObj?.nome || "Contato");
+
+      const resolvedPhone = (contactObj?.phone && contactObj.phone !== "Sem Número")
+        ? contactObj.phone
+        : (contactObj?.phone || "Sem Número");
+
+      return {
+        id: q.id,
+        campaign_id: q.campaign_id,
+        contact_id: q.contact_id,
+        mensagem_final: q.mensagem_final,
+        status: q.status,
+        scheduled_at: q.scheduled_at,
+        sent_at: q.processed_at,
+        erro: q.error_message,
+        contacts: {
+          id: q.contact_id || contactObj?.id || "",
+          nome: resolvedName,
+          phone: resolvedPhone,
+          email: contactObj?.email || "",
+        },
+        campaigns: campaignsMap[q.campaign_id]
+          ? { id: campaignsMap[q.campaign_id].id, nome: campaignsMap[q.campaign_id].nome }
+          : undefined,
+      };
+    });
 
     // Stats calculation across all queue messages
     const { data: allStats } = await supabaseAdmin
