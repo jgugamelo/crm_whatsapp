@@ -455,8 +455,8 @@ export default function DisparadorDashboardPage() {
                       </span>
                       <span className="block text-[9px] text-muted-foreground mt-1 font-sans">
                         {item.status === "enviado" && item.sent_at
-                          ? new Date(item.sent_at).toLocaleTimeString()
-                          : new Date(item.scheduled_at).toLocaleTimeString()
+                          ? new Date(item.sent_at).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" })
+                          : new Date(item.scheduled_at).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" })
                         }
                       </span>
                     </div>
@@ -500,8 +500,8 @@ export default function DisparadorDashboardPage() {
                 </div>
                 <span className="text-[11px] font-mono">
                   {selectedItem.sent_at
-                    ? `Enviado às ${new Date(selectedItem.sent_at).toLocaleTimeString()}`
-                    : `Agendado: ${new Date(selectedItem.scheduled_at).toLocaleTimeString()}`}
+                    ? `Enviado às ${new Date(selectedItem.sent_at).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
+                    : `Agendado: ${new Date(selectedItem.scheduled_at).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" })}`}
                 </span>
               </div>
 

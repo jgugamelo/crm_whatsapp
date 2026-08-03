@@ -1,6 +1,9 @@
 /**
- * Helper utilities to enforce campaign sending window (janela_inicio - janela_fim).
+ * Helper utilities to enforce campaign sending window (janela_inicio - janela_fim)
+ * strictly in America/Sao_Paulo (Brasilia Time, UTC-3).
  */
+
+const SAO_PAULO_TZ = "America/Sao_Paulo";
 
 export function parseWindowTime(timeStr: string = "08:00"): { hours: number; minutes: number } {
   if (!timeStr || typeof timeStr !== "string") return { hours: 8, minutes: 0 };
@@ -14,70 +17,98 @@ export function parseWindowTime(timeStr: string = "08:00"): { hours: number; min
 }
 
 /**
- * Returns true if the given Date falls strictly within [janelaInicio, janelaFim].
+ * Returns year, month, day in America/Sao_Paulo for a given Date.
+ */
+function getSaoPauloYMD(d: Date): { year: number; month: number; day: number } {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: SAO_PAULO_TZ,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
+
+  const parts = formatter.formatToParts(d);
+  const map: Record<string, number> = {};
+  for (const p of parts) {
+    if (p.type !== "literal") {
+      map[p.type] = parseInt(p.value, 10);
+    }
+  }
+
+  return {
+    year: map.year,
+    month: map.month,
+    day: map.day,
+  };
+}
+
+/**
+ * Builds a Date object corresponding to specific YYYY-MM-DD HH:mm:ss in America/Sao_Paulo (UTC-3).
+ */
+export function createSaoPauloDate(year: number, month: number, day: number, hours: number, minutes: number = 0, seconds: number = 0): Date {
+  const yyyy = String(year).padStart(4, "0");
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  const hh = String(hours).padStart(2, "0");
+  const min = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+
+  return new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}-03:00`);
+}
+
+/**
+ * Returns true if the given Date falls strictly within [janelaInicio, janelaFim] in Brasilia Time.
  */
 export function isTimeInCampaignWindow(
   targetDate: Date,
   janelaInicio: string = "08:00",
   janelaFim: string = "20:00"
 ): boolean {
-  const date = new Date(targetDate.getTime());
+  const ymd = getSaoPauloYMD(targetDate);
   const { hours: startH, minutes: startM } = parseWindowTime(janelaInicio);
   const { hours: endH, minutes: endM } = parseWindowTime(janelaFim);
 
-  const windowStart = new Date(date.getTime());
-  windowStart.setHours(startH, startM, 0, 0);
+  const windowStart = createSaoPauloDate(ymd.year, ymd.month, ymd.day, startH, startM, 0);
+  const windowEnd = createSaoPauloDate(ymd.year, ymd.month, ymd.day, endH, endM, 0);
 
-  const windowEnd = new Date(date.getTime());
-  windowEnd.setHours(endH, endM, 0, 0);
-
-  // If window spans overnight (e.g. 22:00 to 06:00)
   if (windowEnd.getTime() < windowStart.getTime()) {
-    return date.getTime() >= windowStart.getTime() || date.getTime() <= windowEnd.getTime();
+    return targetDate.getTime() >= windowStart.getTime() || targetDate.getTime() <= windowEnd.getTime();
   }
 
-  return date.getTime() >= windowStart.getTime() && date.getTime() <= windowEnd.getTime();
+  return targetDate.getTime() >= windowStart.getTime() && targetDate.getTime() <= windowEnd.getTime();
 }
 
 /**
- * Normalizes a target Date so that it is guaranteed to fall inside the campaign window.
- * If targetDate is before windowStart today, it moves to windowStart today.
- * If targetDate is after windowEnd today, it moves to windowStart TOMORROW.
+ * Normalizes a target Date so that it is guaranteed to fall inside the campaign window in Brasilia Time (America/Sao_Paulo).
  */
 export function getNextValidWindowTime(
   targetDate: Date,
   janelaInicio: string = "08:00",
   janelaFim: string = "20:00"
 ): Date {
-  const date = new Date(targetDate.getTime());
+  const ymd = getSaoPauloYMD(targetDate);
   const { hours: startH, minutes: startM } = parseWindowTime(janelaInicio);
   const { hours: endH, minutes: endM } = parseWindowTime(janelaFim);
 
-  const windowStart = new Date(date.getTime());
-  windowStart.setHours(startH, startM, 0, 0);
+  const windowStart = createSaoPauloDate(ymd.year, ymd.month, ymd.day, startH, startM, 0);
+  const windowEnd = createSaoPauloDate(ymd.year, ymd.month, ymd.day, endH, endM, 0);
 
-  const windowEnd = new Date(date.getTime());
-  windowEnd.setHours(endH, endM, 0, 0);
-
-  // Standard window (e.g. 08:00 to 20:00)
   if (windowStart.getTime() <= windowEnd.getTime()) {
-    // 1. If date is before windowStart today (e.g. 04:25 AM when window is 08:00 - 20:00)
-    if (date.getTime() < windowStart.getTime()) {
+    // 1. If date is before windowStart today (in Brasilia Time)
+    if (targetDate.getTime() < windowStart.getTime()) {
       return windowStart;
     }
-    // 2. If date is after windowEnd today (e.g. 21:30 PM when window is 08:00 - 20:00)
-    if (date.getTime() >= windowEnd.getTime()) {
-      const tomorrowStart = new Date(windowStart.getTime());
-      tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    // 2. If date is after windowEnd today (in Brasilia Time), move to windowStart TOMORROW
+    if (targetDate.getTime() >= windowEnd.getTime()) {
+      const tomorrowStart = new Date(windowStart.getTime() + 24 * 60 * 60 * 1000);
       return tomorrowStart;
     }
-    return date;
+    return targetDate;
   }
 
-  // Overnight window (e.g. 22:00 to 06:00)
-  if (!isTimeInCampaignWindow(date, janelaInicio, janelaFim)) {
+  if (!isTimeInCampaignWindow(targetDate, janelaInicio, janelaFim)) {
     return windowStart;
   }
 
-  return date;
+  return targetDate;
 }
