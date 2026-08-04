@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { startWahaSession } from '@/lib/whatsapp/waha-api'
+import { startWahaSession, restartWahaSession } from '@/lib/whatsapp/waha-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
 
 export async function POST(request: Request) {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { session: targetSession, id: targetId } = body
+    const { session: targetSession, id: targetId, forceRestart } = body
 
     let query = supabase
       .from('whatsapp_config')
@@ -58,8 +58,13 @@ export async function POST(request: Request) {
     const protocol = request.headers.get('x-forwarded-proto') || 'https'
     const webhookUrl = `${protocol}://${host}/api/whatsapp/webhook/waha`
 
-    await startWahaSession(wahaConfig, webhookUrl)
-    return NextResponse.json({ success: true, message: 'WAHA session start requested.' })
+    if (forceRestart) {
+      await restartWahaSession(wahaConfig)
+    } else {
+      await startWahaSession(wahaConfig, webhookUrl)
+    }
+
+    return NextResponse.json({ success: true, message: 'WAHA session start/restart requested.' })
   } catch (err: any) {
     console.error('[waha/start] error:', err)
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })

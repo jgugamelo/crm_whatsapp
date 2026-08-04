@@ -207,6 +207,23 @@ export async function stopWahaSession(config: WahaConfig): Promise<void> {
   }
 }
 
+export async function restartWahaSession(config: WahaConfig): Promise<void> {
+  try {
+    const res = await wahaFetch(config, `/api/sessions/${config.waha_session}/restart`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      console.warn(`[waha-api] Restart session endpoint returned status ${res.status}, falling back to stop + start`);
+      await stopWahaSession(config).catch(() => {});
+      await startWahaSession(config).catch(() => {});
+    }
+  } catch (err) {
+    console.error('[waha-api] restartWahaSession error:', err);
+    await stopWahaSession(config).catch(() => {});
+    await startWahaSession(config).catch(() => {});
+  }
+}
+
 export async function getWahaQrCode(config: WahaConfig): Promise<Response> {
   // Try the new auth/qr endpoint first
   const res = await wahaFetch(config, `/api/${config.waha_session}/auth/qr?format=image`, {

@@ -124,6 +124,7 @@ export async function GET(request: Request) {
       .select(`
         id,
         campaign_id,
+        session_id,
         mensagem_final,
         status,
         scheduled_at,
@@ -218,6 +219,7 @@ export async function GET(request: Request) {
       return {
         id: q.id,
         campaign_id: q.campaign_id,
+        session_id: q.session_id,
         contact_id: q.contact_id || contactObj?.id,
         mensagem_final: q.mensagem_final,
         status: q.status,

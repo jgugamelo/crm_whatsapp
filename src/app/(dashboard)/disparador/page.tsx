@@ -16,6 +16,7 @@ import {
   Copy,
   ExternalLink,
   RotateCw,
+  RefreshCw,
   MessageSquare,
   Calendar,
   User,
@@ -49,6 +50,7 @@ import { toast } from "sonner";
 interface QueueLog {
   id: string;
   campaign_id?: string;
+  session_id?: string;
   contact_id?: string;
   mensagem_final: string;
   status: string;
@@ -192,6 +194,39 @@ export default function DisparadorDashboardPage() {
       await loadData();
     } catch (err: any) {
       toast.error(err.message || "Erro ao tentar reenviar");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const handleReconnectAndRetry = async (queueId: string, sessionId?: string) => {
+    setRetrying(true);
+    try {
+      if (sessionId) {
+        toast.loading("Reiniciando linha do WhatsApp (WAHA)...", { id: "reconnect-waha" });
+        await fetch("/api/whatsapp/waha/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session: sessionId, forceRestart: true }),
+        }).catch(() => {});
+        toast.success("Linha do WhatsApp reconectada!", { id: "reconnect-waha" });
+      }
+
+      const res = await fetch("/api/disparador/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queueId }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Falha ao reagendar mensagem");
+      }
+
+      toast.success("Mensagem reagendada e enviada para processamento!");
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao reconectar e reenviar");
     } finally {
       setRetrying(false);
     }
@@ -507,23 +542,50 @@ export default function DisparadorDashboardPage() {
 
               {/* Error Alert Box (if error) */}
               {selectedItem.status === "erro" && (
-                <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-red-600 dark:text-red-300 space-y-2">
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-red-600 dark:text-red-300 space-y-2.5">
                   <div className="flex items-center gap-1.5 font-semibold text-xs">
                     <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" /> Motivo da Falha:
                   </div>
                   <p className="text-xs font-mono bg-background/50 p-2 rounded border border-red-500/20 whitespace-pre-wrap break-all">
                     {selectedItem.erro || "Ocorreu um erro desconhecido durante o disparo."}
                   </p>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={retrying}
-                    onClick={() => handleRetryItem(selectedItem.id)}
-                    className="w-full h-8 text-xs gap-1.5 mt-1"
-                  >
-                    {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
-                    Tentar Reenviar Mensagem Agora
-                  </Button>
+
+                  {selectedItem.erro?.includes("463") && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 text-amber-700 dark:text-amber-300 text-[11px] space-y-1">
+                      <p className="font-semibold flex items-center gap-1">
+                        <RefreshCw className="h-3.5 w-3.5 text-amber-500" /> Como resolver instantaneamente:
+                      </p>
+                      <p className="text-[10px] leading-relaxed">
+                        A linha WhatsApp perdeu momentaneamente a conexão com o servidor da Meta. Clique em <strong>"Reiniciar Linha e Reenviar"</strong> abaixo para reconectar a linha e processar a mensagem!
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={retrying}
+                      onClick={() => handleRetryItem(selectedItem.id)}
+                      className="flex-1 h-8 text-xs gap-1.5"
+                    >
+                      {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                      Tentar Reenviar Agora
+                    </Button>
+
+                    {selectedItem.erro?.includes("463") && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        disabled={retrying}
+                        onClick={() => handleReconnectAndRetry(selectedItem.id, selectedItem.session_id || "unicesumar03")}
+                        className="flex-1 h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                      >
+                        {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        Reiniciar Linha e Reenviar
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
 
