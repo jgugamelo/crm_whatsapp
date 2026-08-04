@@ -383,38 +383,55 @@ export async function processQueueBatch() {
         console.error(`[Queue Worker] Error processing item for campaign ${campaign.id}:`, itemErr);
         if (currentItem) {
           const currentAttempts = (currentItem.attempts || 0) + 1;
+          const isError463 = (itemErr.message || String(itemErr)).includes("463");
 
-          // Attempt failover line rotation if attempts < 3 and multiple sessions exist
+          // Attempt failover line rotation if multiple sessions exist
           let failoverHandled = false;
-          if (currentAttempts < 3) {
-            const { data: alternativeSessions } = await supabaseAdmin
-              .from("whatsapp_config")
-              .select("*")
-              .eq("account_id", campaign.account_id || currentItem.account_id)
-              .eq("provider", "waha")
-              .eq("session_status", "WORKING")
-              .neq("id", currentItem.session_id || "");
+          const { data: alternativeSessions } = await supabaseAdmin
+            .from("whatsapp_config")
+            .select("*")
+            .eq("account_id", campaign.account_id || currentItem.account_id)
+            .eq("provider", "waha")
+            .eq("session_status", "WORKING")
+            .neq("id", currentItem.session_id || "");
 
-            if (alternativeSessions && alternativeSessions.length > 0) {
-              const altConfig = alternativeSessions[0];
-              console.log(`[Queue Worker] Failover line switch: Retrying item ${currentItem.id} on line ${altConfig.waha_session}`);
-              await supabaseAdmin
-                .from("disp_message_queue")
-                .update({
-                  session_id: altConfig.id,
-                  attempts: currentAttempts,
-                  error_message: `Tentativa ${currentAttempts} falhou na linha anterior (${itemErr.message}). Alternado para linha ${altConfig.waha_session}...`,
-                })
-                .eq("id", currentItem.id);
+          if (alternativeSessions && alternativeSessions.length > 0) {
+            const altConfig = alternativeSessions[0];
+            console.log(`[Queue Worker] Failover line switch: Rotating campaign ${campaign.id} to line ${altConfig.waha_session}`);
 
-              failoverHandled = true;
-            }
+            // Retry current item on altConfig
+            await supabaseAdmin
+              .from("disp_message_queue")
+              .update({
+                session_id: altConfig.id,
+                attempts: currentAttempts,
+                error_message: `Linha anterior em trava de alcance Meta (${itemErr.message}). Alternando lote para linha ${altConfig.waha_session}...`,
+              })
+              .eq("id", currentItem.id);
+
+            // Bulk switch all remaining scheduled items of this campaign to the new line!
+            await supabaseAdmin
+              .from("disp_message_queue")
+              .update({ session_id: altConfig.id })
+              .eq("campaign_id", campaign.id)
+              .eq("status", "agendado")
+              .eq("session_id", currentItem.session_id);
+
+            failoverHandled = true;
           }
 
           if (!failoverHandled) {
             let userFriendlyError = itemErr.message || String(itemErr);
-            if (userFriendlyError.includes("463")) {
-              userFriendlyError = `Erro 463 (WhatsApp): Destinatário sem conta WhatsApp ativa ou JID incompatível. Suas linhas NÃO correm risco de banimento. Detalhes: ${userFriendlyError}`;
+            if (isError463) {
+              userFriendlyError = `Erro 463 (Trava de Alcance Meta): A Meta aplicou um limite temporário de envios a novos contatos nesta linha. O disparo continuará automaticamente assim que a trava expirar. Suas linhas NÃO foram banidas!`;
+
+              // Pause campaign if single line is timelocked to protect WhatsApp line from ban
+              await supabaseAdmin
+                .from("campaigns")
+                .update({ status: "pausado" })
+                .eq("id", campaign.id);
+
+              console.log(`[Queue Worker] Campaign ${campaign.id} auto-paused due to Meta Reachout Timelock (Error 463).`);
             }
 
             await supabaseAdmin
