@@ -228,17 +228,43 @@ export interface WahaSendResult {
   messageId: string;
 }
 
+/**
+ * For Brazilian numbers (starting with 55), returns the alternative 8-digit or 9-digit JID format if applicable.
+ * - 13 digits (55 + 2 DDD + 9XXXXXXXX): Returns 12 digits (55 + 2 DDD + XXXXXXXX)
+ * - 12 digits (55 + 2 DDD + XXXXXXXX): Returns 13 digits (55 + 2 DDD + 9XXXXXXXX)
+ */
+function getAlternativeBrazilianJid(to: string): string | null {
+  const digits = to.replace(/\D/g, "");
+  if (!digits.startsWith("55")) return null;
+
+  // 13 digits: 55 + DDD (2) + 9 + 8 digits -> 5521993302685
+  if (digits.length === 13 && digits[4] === "9") {
+    // Remove the extra '9' (at index 4) -> 552193302685@c.us
+    const altDigits = digits.slice(0, 4) + digits.slice(5);
+    return `${altDigits}@c.us`;
+  }
+
+  // 12 digits: 55 + DDD (2) + 8 digits -> 552193302685
+  if (digits.length === 12) {
+    // Add the extra '9' (at index 4) -> 5521993302685@c.us
+    const altDigits = digits.slice(0, 4) + "9" + digits.slice(4);
+    return `${altDigits}@c.us`;
+  }
+
+  return null;
+}
+
 export async function sendWahaTextMessage(
   config: WahaConfig,
   to: string,
   text: string,
   replyToId?: string
 ): Promise<WahaSendResult> {
-  // Format phone number to WAHA expected format: 5511999999999@c.us
-  const chatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
+  // Primary format: 5521993302685@c.us
+  const primaryChatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
 
   const payload: Record<string, any> = {
-    chatId,
+    chatId: primaryChatId,
     text,
     session: config.waha_session,
   };
@@ -247,7 +273,7 @@ export async function sendWahaTextMessage(
     payload.reply_to = replyToId;
   }
 
-  const res = await wahaFetch(config, '/api/sendText', {
+  let res = await wahaFetch(config, '/api/sendText', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -255,6 +281,24 @@ export async function sendWahaTextMessage(
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
+
+    // If initial send failed (e.g. WAHA Error 463 on 13-digit JID), try alternative 8-digit or 9-digit Brazilian JID format!
+    const altChatId = getAlternativeBrazilianJid(to);
+    if (altChatId && altChatId !== primaryChatId) {
+      console.log(`[waha-api] Initial sendText to ${primaryChatId} failed (${res.status}). Retrying with Brazilian alternative JID: ${altChatId}...`);
+      payload.chatId = altChatId;
+      const retryRes = await wahaFetch(config, '/api/sendText', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (retryRes.ok) {
+        const data = await retryRes.json();
+        return { messageId: data.id || '' };
+      }
+    }
+
     throw new Error(`WAHA sendText failed (${res.status}): ${errText}`);
   }
 
@@ -346,8 +390,9 @@ export async function sendWahaMediaMessage(
     filePayload.url = mediaUrl;
   }
 
-  const payload = {
-    chatId,
+  const primaryChatId = to.includes('@') ? to : `${to.replace(/\D/g, '')}@c.us`;
+  const payload: Record<string, any> = {
+    chatId: primaryChatId,
     file: filePayload,
     caption: caption || '',
     session: config.waha_session,
@@ -363,7 +408,7 @@ export async function sendWahaMediaMessage(
     endpoint = '/api/sendVoice';
   }
 
-  const res = await wahaFetch(config, endpoint, {
+  let res = await wahaFetch(config, endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -371,6 +416,23 @@ export async function sendWahaMediaMessage(
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
+
+    const altChatId = getAlternativeBrazilianJid(to);
+    if (altChatId && altChatId !== primaryChatId) {
+      console.log(`[waha-api] Initial sendMedia to ${primaryChatId} failed (${res.status}). Retrying with Brazilian alternative JID: ${altChatId}...`);
+      payload.chatId = altChatId;
+      const retryRes = await wahaFetch(config, endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (retryRes.ok) {
+        const data = await retryRes.json();
+        return { messageId: data.id || '' };
+      }
+    }
+
     throw new Error(`WAHA media send failed (${res.status}): ${errText}`);
   }
 

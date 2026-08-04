@@ -412,11 +412,16 @@ export async function processQueueBatch() {
           }
 
           if (!failoverHandled) {
+            let userFriendlyError = itemErr.message || String(itemErr);
+            if (userFriendlyError.includes("463")) {
+              userFriendlyError = `Erro 463 (WhatsApp): Destinatário sem conta WhatsApp ativa ou JID incompatível. Suas linhas NÃO correm risco de banimento. Detalhes: ${userFriendlyError}`;
+            }
+
             await supabaseAdmin
               .from("disp_message_queue")
               .update({
                 status: "erro",
-                error_message: itemErr.message || String(itemErr),
+                error_message: userFriendlyError,
                 attempts: currentAttempts,
               })
               .eq("id", currentItem.id);
