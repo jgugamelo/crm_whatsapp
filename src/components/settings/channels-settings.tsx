@@ -54,9 +54,66 @@ import {
 } from "@/components/ui/card";
 import { SettingsPanelHead } from "./settings-panel-head";
 
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { useEffect } from "react";
+import { Send, Loader2 } from "lucide-react";
+
 export function ChannelsSettings() {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState(0);
+
+  // Telegram States
+  const [tgToken, setTgToken] = useState("");
+  const [savingTg, setSavingTg] = useState(false);
+  const [tgConfigs, setTgConfigs] = useState<any[]>([]);
+  const [loadingTg, setLoadingTg] = useState(true);
+
+  const fetchTgConfigs = async () => {
+    try {
+      const res = await fetch("/api/telegram/config");
+      if (res.ok) {
+        const data = await res.json();
+        setTgConfigs(data.configs || []);
+      }
+    } catch (err) {
+      console.error("Failed to load Telegram configs:", err);
+    } finally {
+      setLoadingTg(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTgConfigs();
+  }, []);
+
+  const handleSaveTelegram = async () => {
+    if (!tgToken.trim()) {
+      toast.error("Por favor insira um Token de Bot do Telegram válido.");
+      return;
+    }
+    setSavingTg(true);
+    try {
+      const res = await fetch("/api/telegram/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bot_token: tgToken }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao conectar o Bot do Telegram");
+      }
+
+      toast.success(`Bot @${data.bot?.username || ""} conectado com sucesso! Webhook ativado.`);
+      setTgToken("");
+      await fetchTgConfigs();
+    } catch (err: any) {
+      toast.error(err.message || "Falha na conexão com o Telegram");
+    } finally {
+      setSavingTg(false);
+    }
+  };
 
   const startMockConnection = () => {
     setConnecting(true);
@@ -77,9 +134,79 @@ export function ChannelsSettings() {
   return (
     <section className="max-w-3xl space-y-6 animate-in fade-in-50 duration-200">
       <SettingsPanelHead
-        title="Instagram & Messenger"
-        description="Conecte suas contas comerciais do Instagram Direct e do Facebook Messenger em um inbox unificado."
+        title="Canais de Atendimento & Disparo"
+        description="Conecte seu Telegram Bot e suas contas comerciais do Instagram Direct e Facebook Messenger."
       />
+
+      {/* Telegram Integration Card */}
+      <Card className="border border-sky-500/30 bg-sky-500/5">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-md">
+              <Send className="size-5" />
+            </div>
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                Telegram Bot API (Oficial)
+                <span className="text-[10px] bg-sky-500/20 text-sky-600 dark:text-sky-300 font-mono px-2 py-0.5 rounded-full">
+                  100% Gratuito
+                </span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Conecte seu Bot do Telegram para receber mensagens no Inbox e realizar disparos em massa.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-foreground">
+              Token do Bot (fornecido pelo @BotFather)
+            </label>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz..."
+                value={tgToken}
+                onChange={(e) => setTgToken(e.target.value)}
+                className="text-xs font-mono bg-background"
+              />
+              <Button
+                onClick={handleSaveTelegram}
+                disabled={savingTg}
+                size="sm"
+                className="bg-sky-600 hover:bg-sky-700 text-white font-medium shrink-0"
+              >
+                {savingTg ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Send className="size-3.5 mr-1" />}
+                Conectar Bot
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Abra o Telegram, pesquise por <code className="text-sky-600 dark:text-sky-400">@BotFather</code> e use o comando <code className="text-sky-600 dark:text-sky-400">/newbot</code> para obter seu token.
+            </p>
+          </div>
+
+          {tgConfigs.length > 0 && (
+            <div className="pt-3 border-t border-sky-500/20 space-y-2">
+              <h5 className="text-xs font-semibold text-foreground">Bots Conectados:</h5>
+              {tgConfigs.map((cfg) => (
+                <div key={cfg.id} className="flex items-center justify-between p-2.5 rounded-lg border border-sky-500/20 bg-background/60 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Send className="size-4 text-sky-500" />
+                    <div>
+                      <span className="font-semibold">{cfg.bot_name}</span>
+                      <span className="text-muted-foreground ml-1 font-mono text-[11px]">(@{cfg.bot_username})</span>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <CheckCircle2 className="size-3" /> Webhook Ativo
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-3.5 py-2.5 text-xs text-primary font-medium w-fit">
         <Sparkles className="size-4 shrink-0 animate-pulse" />

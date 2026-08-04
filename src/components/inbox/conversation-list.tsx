@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus } from "@/types";
-import { Search, ChevronDown, Pin, PinOff, Tag as TagIcon, Kanban } from "lucide-react";
+import { Search, ChevronDown, Pin, PinOff, Tag as TagIcon, Kanban, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -502,6 +502,11 @@ function ConversationItem({
         ) : (
           initials
         )}
+        {(conversation as any).channel === 'telegram' && (
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-white text-[8px] shadow">
+            <Send className="h-2.5 w-2.5" />
+          </span>
+        )}
       </div>
 
       {/* Content */}
@@ -540,11 +545,15 @@ function ConversationItem({
 
         {/* Badges: Line, Stage, Tags */}
         <div className="mt-1 flex flex-wrap gap-1 items-center">
-          {(conversation as any).waha_session && (
+          {(conversation as any).channel === 'telegram' ? (
+            <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-sky-500 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20 leading-none select-none">
+              <Send className="h-2.5 w-2.5" /> Telegram
+            </span>
+          ) : (conversation as any).waha_session ? (
             <span className="inline-block text-[9px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 leading-none select-none">
               {(conversation as any).waha_session}
             </span>
-          )}
+          ) : null}
 
           {stageName && (
             <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 leading-none">

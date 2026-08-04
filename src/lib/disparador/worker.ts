@@ -10,6 +10,11 @@ import {
   playWacallsAudio,
   getWacallsCallStatus,
 } from "@/lib/whatsapp/waha-api";
+import {
+  sendTelegramTextMessage,
+  sendTelegramPhotoMessage,
+  sendTelegramDocumentMessage,
+} from "@/lib/telegram/telegram-api";
 import { decrypt } from "@/lib/whatsapp/encryption";
 import OpenAI from "openai";
 import { isTimeInCampaignWindow } from "@/lib/disparador/window-helper";
@@ -258,6 +263,49 @@ export async function processQueueBatch() {
         // Substitute name variables
         const cleanText = messageText.replace(/{nome}/g, contactData?.name || "Cliente");
         const normalizedPhone = phone.replace("+", "");
+
+        // Dispatch via Telegram if channel is telegram or contact has telegram_chat_id
+        if ((item as any).channel === 'telegram' || (contactData as any)?.telegram_chat_id) {
+          const tgChatId = (contactData as any)?.telegram_chat_id || phone.replace('tg_', '');
+          const { data: tgConfig } = await supabaseAdmin
+            .from('telegram_config')
+            .select('bot_token')
+            .eq('account_id', campaign.account_id)
+            .eq('status', 'active')
+            .limit(1)
+            .maybeSingle();
+
+          if (!tgConfig?.bot_token) {
+            throw new Error("Bot do Telegram não está configurado para esta conta.");
+          }
+
+          let tgRes;
+          if (tipo === "imagem" && item.media_url) {
+            tgRes = await sendTelegramPhotoMessage(tgConfig.bot_token, tgChatId, item.media_url, cleanText);
+          } else if (item.media_url) {
+            tgRes = await sendTelegramDocumentMessage(tgConfig.bot_token, tgChatId, item.media_url, cleanText);
+          } else {
+            tgRes = await sendTelegramTextMessage(tgConfig.bot_token, tgChatId, cleanText);
+          }
+
+          await supabaseAdmin
+            .from("disp_message_queue")
+            .update({
+              status: "enviado",
+              processed_at: new Date().toISOString(),
+              wamid: tgRes.messageId,
+            })
+            .eq("id", item.id);
+
+          try {
+            await supabaseAdmin.rpc("increment_campaign_metric", {
+              p_campaign_id: item.campaign_id,
+              p_field: "total_enviados",
+            });
+          } catch (metricErr) {}
+
+          continue;
+        }
 
         // Human simulation presence (anti-ban)
         if (tipo !== "ligacao") {

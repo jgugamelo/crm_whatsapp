@@ -10,6 +10,11 @@ import {
   sendWahaTextMessage,
   sendWahaMediaMessage,
 } from '@/lib/whatsapp/waha-api'
+import {
+  sendTelegramTextMessage,
+  sendTelegramPhotoMessage,
+  sendTelegramDocumentMessage,
+} from '@/lib/telegram/telegram-api'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import {
@@ -239,6 +244,77 @@ export async function POST(request: Request) {
         { error: 'Conversation not found' },
         { status: 404 }
       )
+    }
+
+    // Handle Telegram outbound channel routing
+    if ((conversation as any)?.channel === 'telegram') {
+      const { data: tgConfig } = await supabase
+        .from('telegram_config')
+        .select('bot_token')
+        .eq('account_id', accountId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!tgConfig || !tgConfig.bot_token) {
+        return NextResponse.json(
+          { error: 'Bot do Telegram não está configurado para esta conta.' },
+          { status: 400 }
+        );
+      }
+
+      const contactObj = (conversation as any)?.contact;
+      const telegramChatId = contactObj?.telegram_chat_id || (contactObj?.phone ? contactObj.phone.replace('tg_', '') : null);
+
+      if (!telegramChatId) {
+        return NextResponse.json(
+          { error: 'ID do Chat do Telegram não encontrado para este contato.' },
+          { status: 400 }
+        );
+      }
+
+      let tgSendResult;
+      if (isMediaKind) {
+        if (message_type === 'image') {
+          tgSendResult = await sendTelegramPhotoMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+        } else {
+          tgSendResult = await sendTelegramDocumentMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+        }
+      } else {
+        tgSendResult = await sendTelegramTextMessage(tgConfig.bot_token, telegramChatId, content_text || '');
+      }
+
+      // Persist outbound message in DB
+      const { data: insertedMessage } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversation.id,
+          account_id: accountId,
+          channel: 'telegram',
+          direction: 'outbound',
+          sender_type: 'agent',
+          content: content_text || (isMediaKind ? `[${message_type}]` : ''),
+          telegram_message_id: tgSendResult.messageId,
+          created_at: new Date().toISOString(),
+        })
+        .select('*')
+        .single();
+
+      // Update conversation last message
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: content_text || (isMediaKind ? `[${message_type}]` : ''),
+          last_message_at: new Date().toISOString(),
+        })
+        .eq('id', conversation.id);
+
+      return NextResponse.json({
+        success: true,
+        messageId: tgSendResult.messageId,
+        message: insertedMessage,
+      });
     }
 
     const conversation_id = conversation.id
