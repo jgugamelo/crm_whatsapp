@@ -11,13 +11,13 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { phone_number } = body;
+    const { phone_number, api_id, api_hash } = body;
 
     if (!phone_number || typeof phone_number !== 'string' || !phone_number.trim()) {
       return NextResponse.json({ error: 'Número de telefone é obrigatório com DDD (ex: +5521999999999).' }, { status: 400 });
     }
 
-    const res = await sendTelegramPhoneCode(phone_number.trim());
+    const res = await sendTelegramPhoneCode(phone_number.trim(), api_id, api_hash);
 
     return NextResponse.json({
       success: true,

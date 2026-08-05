@@ -43,13 +43,13 @@ export async function POST(request: Request) {
     const accountId = await getAccountId(supabase, user.id);
 
     const body = await request.json().catch(() => ({}));
-    const { phone_number, code, password } = body;
+    const { phone_number, code, password, api_id, api_hash } = body;
 
     if (!phone_number || !code) {
       return NextResponse.json({ error: 'Número de telefone e Código são obrigatórios.' }, { status: 400 });
     }
 
-    const res = await loginTelegramWithCode(phone_number.trim(), code.trim(), password ? String(password).trim() : undefined);
+    const res = await loginTelegramWithCode(phone_number.trim(), code.trim(), password ? String(password).trim() : undefined, api_id, api_hash);
 
     // Save into wacrm.telegram_user_sessions
     const { data: existing } = await supabaseAdmin

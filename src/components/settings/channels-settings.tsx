@@ -71,6 +71,8 @@ export function ChannelsSettings() {
 
   // Telegram Phone User Session States
   const [tgPhone, setTgPhone] = useState("");
+  const [tgApiId, setTgApiId] = useState("");
+  const [tgApiHash, setTgApiHash] = useState("");
   const [tgCode, setTgCode] = useState("");
   const [tgPassword, setTgPassword] = useState("");
   const [phoneStep, setPhoneStep] = useState<"input_phone" | "input_code">("input_phone");
@@ -120,7 +122,11 @@ export function ChannelsSettings() {
       const res = await fetch("/api/telegram/user/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: tgPhone.trim() }),
+        body: JSON.stringify({
+          phone_number: tgPhone.trim(),
+          api_id: tgApiId ? tgApiId.trim() : undefined,
+          api_hash: tgApiHash ? tgApiHash.trim() : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao enviar código de verificação");
@@ -147,6 +153,8 @@ export function ChannelsSettings() {
           phone_number: tgPhone.trim(),
           code: tgCode.trim(),
           password: tgPassword ? tgPassword.trim() : undefined,
+          api_id: tgApiId ? tgApiId.trim() : undefined,
+          api_hash: tgApiHash ? tgApiHash.trim() : undefined,
         }),
       });
 
@@ -348,28 +356,61 @@ export function ChannelsSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           {phoneStep === "input_phone" ? (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">
-                Número de Celular com DDD (formato internacional, ex: +5521999999999)
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="+5521999999999"
-                  value={tgPhone}
-                  onChange={(e) => setTgPhone(e.target.value)}
-                  className="text-xs font-mono bg-background"
-                />
-                <Button
-                  onClick={handleSendPhoneCode}
-                  disabled={sendingCode}
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
-                >
-                  {sendingCode ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Send className="size-3.5 mr-1" />}
-                  Enviar Código SMS/App
-                </Button>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-foreground">
+                    API ID do Telegram (obtenha em my.telegram.org)
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="ex: 24981928"
+                    value={tgApiId}
+                    onChange={(e) => setTgApiId(e.target.value)}
+                    className="text-xs font-mono bg-background"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-foreground">
+                    API Hash do Telegram
+                  </label>
+                  <Input
+                    type="password"
+                    placeholder="ex: a3f89028..."
+                    value={tgApiHash}
+                    onChange={(e) => setTgApiHash(e.target.value)}
+                    className="text-xs font-mono bg-background"
+                  />
+                </div>
               </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">
+                  Número de Celular com DDD (formato internacional, ex: +5521999999999)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="+5521999999999"
+                    value={tgPhone}
+                    onChange={(e) => setTgPhone(e.target.value)}
+                    className="text-xs font-mono bg-background"
+                  />
+                  <Button
+                    onClick={handleSendPhoneCode}
+                    disabled={sendingCode}
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
+                  >
+                    {sendingCode ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Send className="size-3.5 mr-1" />}
+                    Enviar Código SMS/App
+                  </Button>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Para obter seu API ID e API Hash gratuitamente em 30 segundos: acesse <a href="https://my.telegram.org" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">my.telegram.org</a>, faça login com seu celular e clique em <strong>API development tools</strong>.
+              </p>
             </div>
           ) : (
             <div className="space-y-3 p-3 rounded-lg border border-blue-500/20 bg-background/80">

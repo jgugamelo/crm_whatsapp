@@ -1,19 +1,35 @@
 import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 
-const API_ID = Number(process.env.TELEGRAM_API_ID) || 2040;
-const API_HASH = process.env.TELEGRAM_API_HASH || 'b18441a1ed609e10d277d64c87320ac7';
+const DEFAULT_API_ID = Number(process.env.TELEGRAM_API_ID) || 0;
+const DEFAULT_API_HASH = process.env.TELEGRAM_API_HASH || '';
 
 // Temporary store for pending auth flows in memory
-const pendingAuthMap = new Map<string, { client: TelegramClient; phoneCodeHash: string }>();
+const pendingAuthMap = new Map<string, { client: TelegramClient; phoneCodeHash: string; apiId: number; apiHash: string }>();
+
+function getCredentials(customApiId?: number | string, customApiHash?: string) {
+  const apiId = Number(customApiId) || DEFAULT_API_ID;
+  const apiHash = (customApiHash || DEFAULT_API_HASH).trim();
+
+  if (!apiId || !apiHash) {
+    throw new Error('API ID e API Hash do Telegram são necessários. Obtenha em https://my.telegram.org');
+  }
+
+  return { apiId, apiHash };
+}
 
 /**
  * Initiates phone number login by requesting a 5-digit code from Telegram.
  */
-export async function sendTelegramPhoneCode(phoneNumber: string): Promise<{ phoneCodeHash: string }> {
+export async function sendTelegramPhoneCode(
+  phoneNumber: string,
+  customApiId?: number | string,
+  customApiHash?: string
+): Promise<{ phoneCodeHash: string }> {
+  const { apiId, apiHash } = getCredentials(customApiId, customApiHash);
   const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
   const session = new StringSession('');
-  const client = new TelegramClient(session, API_ID, API_HASH, {
+  const client = new TelegramClient(session, apiId, apiHash, {
     connectionRetries: 3,
   });
 
@@ -21,8 +37,8 @@ export async function sendTelegramPhoneCode(phoneNumber: string): Promise<{ phon
 
   const res: any = await client.sendCode(
     {
-      apiId: API_ID,
-      apiHash: API_HASH,
+      apiId,
+      apiHash,
     },
     cleanPhone
   );
@@ -30,6 +46,8 @@ export async function sendTelegramPhoneCode(phoneNumber: string): Promise<{ phon
   pendingAuthMap.set(cleanPhone, {
     client,
     phoneCodeHash: res.phoneCodeHash,
+    apiId,
+    apiHash,
   });
 
   return { phoneCodeHash: res.phoneCodeHash };
@@ -41,7 +59,9 @@ export async function sendTelegramPhoneCode(phoneNumber: string): Promise<{ phon
 export async function loginTelegramWithCode(
   phoneNumber: string,
   code: string,
-  password?: string
+  password?: string,
+  customApiId?: number | string,
+  customApiHash?: string
 ): Promise<{
   sessionString: string;
   telegramUserId: string;
@@ -53,18 +73,25 @@ export async function loginTelegramWithCode(
 
   let client: TelegramClient;
   let phoneCodeHash = '';
+  let apiId = 0;
+  let apiHash = '';
 
   if (pending) {
     client = pending.client;
     phoneCodeHash = pending.phoneCodeHash;
+    apiId = pending.apiId;
+    apiHash = pending.apiHash;
   } else {
+    const creds = getCredentials(customApiId, customApiHash);
+    apiId = creds.apiId;
+    apiHash = creds.apiHash;
     const session = new StringSession('');
-    client = new TelegramClient(session, API_ID, API_HASH, {
+    client = new TelegramClient(session, apiId, apiHash, {
       connectionRetries: 3,
     });
     await client.connect();
     const res: any = await client.sendCode(
-      { apiId: API_ID, apiHash: API_HASH },
+      { apiId, apiHash },
       cleanPhone
     );
     phoneCodeHash = res.phoneCodeHash;
@@ -119,10 +146,13 @@ export async function loginTelegramWithCode(
 export async function sendTelegramUserMessage(
   sessionString: string,
   targetPhoneOrId: string,
-  messageText: string
+  messageText: string,
+  customApiId?: number | string,
+  customApiHash?: string
 ): Promise<{ messageId: string }> {
+  const { apiId, apiHash } = getCredentials(customApiId, customApiHash);
   const session = new StringSession(sessionString);
-  const client = new TelegramClient(session, API_ID, API_HASH, {
+  const client = new TelegramClient(session, apiId, apiHash, {
     connectionRetries: 3,
   });
 
