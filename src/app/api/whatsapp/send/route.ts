@@ -15,6 +15,7 @@ import {
   sendTelegramPhotoMessage,
   sendTelegramDocumentMessage,
 } from '@/lib/telegram/telegram-api'
+import { sendTelegramUserMessage } from '@/lib/telegram/telegram-user-api'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import {
@@ -248,6 +249,12 @@ export async function POST(request: Request) {
 
     // Handle Telegram outbound channel routing
     if ((conversation as any)?.channel === 'telegram') {
+      const contactObj = (conversation as any)?.contact;
+      const telegramChatId = contactObj?.telegram_chat_id || (contactObj?.phone ? contactObj.phone.replace('tg_', '') : null);
+
+      let tgSendResult: { messageId: string } | null = null;
+
+      // 1. Try Bot API first
       const { data: tgConfig } = await supabase
         .from('telegram_config')
         .select('bot_token')
@@ -257,32 +264,42 @@ export async function POST(request: Request) {
         .limit(1)
         .maybeSingle();
 
-      if (!tgConfig || !tgConfig.bot_token) {
-        return NextResponse.json(
-          { error: 'Bot do Telegram não está configurado para esta conta.' },
-          { status: 400 }
-        );
-      }
-
-      const contactObj = (conversation as any)?.contact;
-      const telegramChatId = contactObj?.telegram_chat_id || (contactObj?.phone ? contactObj.phone.replace('tg_', '') : null);
-
-      if (!telegramChatId) {
-        return NextResponse.json(
-          { error: 'ID do Chat do Telegram não encontrado para este contato.' },
-          { status: 400 }
-        );
-      }
-
-      let tgSendResult;
-      if (isMediaKind) {
-        if (message_type === 'image') {
-          tgSendResult = await sendTelegramPhotoMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+      if (tgConfig?.bot_token && telegramChatId) {
+        if (isMediaKind) {
+          if (message_type === 'image') {
+            tgSendResult = await sendTelegramPhotoMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+          } else {
+            tgSendResult = await sendTelegramDocumentMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+          }
         } else {
-          tgSendResult = await sendTelegramDocumentMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+          tgSendResult = await sendTelegramTextMessage(tgConfig.bot_token, telegramChatId, content_text || '');
         }
-      } else {
-        tgSendResult = await sendTelegramTextMessage(tgConfig.bot_token, telegramChatId, content_text || '');
+      }
+
+      // 2. Try User Session (Phone Number) if Bot API wasn't available or target is phone number
+      if (!tgSendResult) {
+        const { data: userSession } = await supabase
+          .from('telegram_user_sessions')
+          .select('session_string')
+          .eq('account_id', accountId)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (userSession?.session_string) {
+          const target = contactObj?.phone || telegramChatId;
+          if (target) {
+            tgSendResult = await sendTelegramUserMessage(userSession.session_string, target, content_text || '');
+          }
+        }
+      }
+
+      if (!tgSendResult) {
+        return NextResponse.json(
+          { error: 'Nenhuma conta ou Bot do Telegram está ativo para enviar a mensagem.' },
+          { status: 400 }
+        );
       }
 
       // Persist outbound message in DB

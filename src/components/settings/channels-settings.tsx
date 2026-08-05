@@ -57,17 +57,27 @@ import { SettingsPanelHead } from "./settings-panel-head";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useEffect } from "react";
-import { Send, Loader2, Trash2 } from "lucide-react";
+import { Send, Loader2, Trash2, Phone, ShieldCheck } from "lucide-react";
 
 export function ChannelsSettings() {
   const [connecting, setConnecting] = useState(false);
   const [step, setStep] = useState(0);
 
-  // Telegram States
+  // Telegram Bot States
   const [tgToken, setTgToken] = useState("");
   const [savingTg, setSavingTg] = useState(false);
   const [tgConfigs, setTgConfigs] = useState<any[]>([]);
   const [loadingTg, setLoadingTg] = useState(true);
+
+  // Telegram Phone User Session States
+  const [tgPhone, setTgPhone] = useState("");
+  const [tgCode, setTgCode] = useState("");
+  const [tgPassword, setTgPassword] = useState("");
+  const [phoneStep, setPhoneStep] = useState<"input_phone" | "input_code">("input_phone");
+  const [sendingCode, setSendingCode] = useState(false);
+  const [loggingInPhone, setLoggingInPhone] = useState(false);
+  const [passwordNeeded, setPasswordNeeded] = useState(false);
+  const [userSessions, setUserSessions] = useState<any[]>([]);
 
   const fetchTgConfigs = async () => {
     try {
@@ -83,9 +93,95 @@ export function ChannelsSettings() {
     }
   };
 
+  const fetchUserSessions = async () => {
+    try {
+      const res = await fetch("/api/telegram/user/sessions");
+      if (res.ok) {
+        const data = await res.json();
+        setUserSessions(data.sessions || []);
+      }
+    } catch (err) {
+      console.error("Failed to load Telegram user sessions:", err);
+    }
+  };
+
   useEffect(() => {
     fetchTgConfigs();
+    fetchUserSessions();
   }, []);
+
+  const handleSendPhoneCode = async () => {
+    if (!tgPhone.trim()) {
+      toast.error("Insira seu número de telefone do Telegram com DDD (ex: +5521999999999).");
+      return;
+    }
+    setSendingCode(true);
+    try {
+      const res = await fetch("/api/telegram/user/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: tgPhone.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao enviar código de verificação");
+      toast.success("Código enviado! Verifique seu aplicativo do Telegram ou SMS.");
+      setPhoneStep("input_code");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao enviar código");
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleLoginPhone = async () => {
+    if (!tgCode.trim()) {
+      toast.error("Insira o código de 5 dígitos recebido.");
+      return;
+    }
+    setLoggingInPhone(true);
+    try {
+      const res = await fetch("/api/telegram/user/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone_number: tgPhone.trim(),
+          code: tgCode.trim(),
+          password: tgPassword ? tgPassword.trim() : undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.passwordNeeded) {
+          setPasswordNeeded(true);
+        }
+        throw new Error(data.error || "Código de verificação incorreto");
+      }
+
+      toast.success(`Conta do Telegram (${data.user?.firstName || tgPhone}) conectada com sucesso!`);
+      setTgPhone("");
+      setTgCode("");
+      setTgPassword("");
+      setPasswordNeeded(false);
+      setPhoneStep("input_phone");
+      await fetchUserSessions();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao conectar conta do Telegram");
+    } finally {
+      setLoggingInPhone(false);
+    }
+  };
+
+  const handleDeleteUserSession = async (id: string) => {
+    try {
+      const res = await fetch(`/api/telegram/user/sessions?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Erro ao desconectar linha do Telegram");
+      toast.success("Linha do Telegram desconectada.");
+      await fetchUserSessions();
+    } catch (err: any) {
+      toast.error(err.message || "Falha ao desconectar");
+    }
+  };
 
   const handleSaveTelegram = async () => {
     if (!tgToken.trim()) {
@@ -219,6 +315,134 @@ export function ChannelsSettings() {
                       onClick={() => handleDeleteTelegram(cfg.id)}
                       className="size-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
                       title="Desconectar Bot"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Telegram Phone User API Card */}
+      <Card className="border border-blue-500/30 bg-blue-500/5">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-md">
+              <Phone className="size-5" />
+            </div>
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                Telegram por Número (Linha Pessoal / Comercial)
+                <span className="text-[10px] bg-blue-500/20 text-blue-600 dark:text-blue-300 font-mono px-2 py-0.5 rounded-full">
+                  Disparo Direto por Telefone
+                </span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Conecte seu número de celular para abordar contatos diretamente pelo número de telefone no Telegram.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {phoneStep === "input_phone" ? (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">
+                Número de Celular com DDD (formato internacional, ex: +5521999999999)
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="+5521999999999"
+                  value={tgPhone}
+                  onChange={(e) => setTgPhone(e.target.value)}
+                  className="text-xs font-mono bg-background"
+                />
+                <Button
+                  onClick={handleSendPhoneCode}
+                  disabled={sendingCode}
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
+                >
+                  {sendingCode ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Send className="size-3.5 mr-1" />}
+                  Enviar Código SMS/App
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 p-3 rounded-lg border border-blue-500/20 bg-background/80">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-foreground">Número: {tgPhone}</span>
+                <Button variant="ghost" size="sm" onClick={() => setPhoneStep("input_phone")} className="h-6 text-[11px]">
+                  Trocar Número
+                </Button>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">
+                  Código de 5 dígitos (recebido no Telegram ou SMS):
+                </label>
+                <Input
+                  type="text"
+                  placeholder="12345"
+                  value={tgCode}
+                  onChange={(e) => setTgCode(e.target.value)}
+                  className="text-xs font-mono bg-background"
+                />
+              </div>
+
+              {passwordNeeded && (
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-xs font-medium text-amber-500 flex items-center gap-1">
+                    <ShieldCheck className="size-3.5" /> Senha da Verificação em Duas Etapas (2FA):
+                  </label>
+                  <Input
+                    type="password"
+                    placeholder="Sua senha do Telegram"
+                    value={tgPassword}
+                    onChange={(e) => setTgPassword(e.target.value)}
+                    className="text-xs bg-background"
+                  />
+                </div>
+              )}
+
+              <Button
+                onClick={handleLoginPhone}
+                disabled={loggingInPhone}
+                size="sm"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+              >
+                {loggingInPhone ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <CheckCircle2 className="size-3.5 mr-1" />}
+                Confirmar e Conectar Linha
+              </Button>
+            </div>
+          )}
+
+          {userSessions.length > 0 && (
+            <div className="pt-3 border-t border-blue-500/20 space-y-2">
+              <h5 className="text-xs font-semibold text-foreground">Linhas Telefônicas Conectadas:</h5>
+              {userSessions.map((sess) => (
+                <div key={sess.id} className="flex items-center justify-between p-2.5 rounded-lg border border-blue-500/20 bg-background/80 text-xs shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Phone className="size-4 text-blue-500 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-foreground">{sess.first_name || sess.phone_number}</span>
+                      <span className="text-muted-foreground ml-1.5 font-mono text-[11px]">({sess.phone_number})</span>
+                      {sess.username && <span className="text-sky-500 ml-1 text-[11px]">@{sess.username}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <CheckCircle2 className="size-3" /> Ativo por Número
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteUserSession(sess.id)}
+                      className="size-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                      title="Desconectar Linha"
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
