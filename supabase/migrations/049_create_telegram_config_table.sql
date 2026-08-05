@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS wacrm.telegram_config (
 ALTER TABLE wacrm.telegram_config ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Account members can manage telegram_config" ON wacrm.telegram_config;
 CREATE POLICY "Account members can manage telegram_config" ON wacrm.telegram_config
-  FOR ALL USING (account_id = auth.uid() OR account_id IN (
-    SELECT account_id FROM wacrm.account_members WHERE user_id = auth.uid()
+  FOR ALL USING (account_id IN (
+    SELECT account_id FROM public.profiles WHERE user_id = auth.uid()
   ));
 
 -- Expose view in public schema
