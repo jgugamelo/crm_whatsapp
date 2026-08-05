@@ -20,10 +20,11 @@ ALTER TABLE wacrm.telegram_config ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Account members can manage telegram_config" ON wacrm.telegram_config;
 CREATE POLICY "Account members can manage telegram_config" ON wacrm.telegram_config
   FOR ALL USING (account_id IN (
-    SELECT account_id FROM public.profiles WHERE user_id = auth.uid()
+    SELECT account_id FROM wacrm.profiles WHERE user_id = auth.uid()
   ));
 
 -- Expose view in public schema
+CREATE OR REPLACE VIEW public.profiles AS SELECT * FROM wacrm.profiles;
 CREATE OR REPLACE VIEW public.telegram_config AS SELECT * FROM wacrm.telegram_config;
 
 -- 2. Ensure contacts support telegram columns
