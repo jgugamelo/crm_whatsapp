@@ -158,19 +158,31 @@ export async function sendTelegramUserMessage(
 
   await client.connect();
 
-  let peer: any = targetPhoneOrId;
-  const rawTarget = targetPhoneOrId.replace('tg_', '').replace(/[^\d+]/g, '');
-  const cleanTarget = rawTarget.startsWith('+') ? rawTarget : `+${rawTarget}`;
+  const numericPhone = targetPhoneOrId.replace('tg_', '').replace(/[^\d]/g, '');
+  const phoneWithPlus = `+${numericPhone}`;
 
-  // If target looks like a phone number, import/resolve contact
-  if (cleanTarget.length >= 10) {
+  let peer: any = null;
+
+  // 1. Try resolving entity directly by phone number
+  try {
+    peer = await client.getEntity(phoneWithPlus);
+  } catch (err1) {
+    try {
+      peer = await client.getEntity(numericPhone);
+    } catch (err2) {
+      // getEntity fallback
+    }
+  }
+
+  // 2. If entity wasn't in local cache, import contact via Telegram API
+  if (!peer && numericPhone.length >= 8) {
     try {
       const imported: any = await client.invoke(
         new Api.contacts.ImportContacts({
           contacts: [
             new Api.InputPhoneContact({
               clientId: (BigInt(Date.now()) as unknown) as any,
-              phone: cleanTarget,
+              phone: numericPhone,
               firstName: 'Contato',
               lastName: '',
             }),
@@ -181,15 +193,19 @@ export async function sendTelegramUserMessage(
       if (imported.users && imported.users.length > 0) {
         peer = imported.users[0];
       }
-    } catch (err) {
-      console.warn('[telegram-user-api] ImportContacts failed, fallback to phone string:', err);
+    } catch (err3) {
+      console.warn('[telegram-user-api] ImportContacts error:', err3);
     }
+  }
+
+  if (!peer) {
+    peer = phoneWithPlus;
   }
 
   const result: any = await client.sendMessage(peer, { message: messageText });
   await client.disconnect();
 
   return {
-    messageId: String(result.id || ''),
+    messageId: String(result?.id || ''),
   };
 }
