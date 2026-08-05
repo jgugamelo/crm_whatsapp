@@ -253,13 +253,14 @@ export async function POST(request: Request) {
       const telegramChatId = contactObj?.telegram_chat_id;
       const targetPhone = contactObj?.phone || telegramChatId;
       const wahaSession = (conversation as any)?.waha_session || '';
+      const adminClient = supabaseAdmin();
 
       let tgSendResult: { messageId: string } | null = null;
       const preferUserSession = wahaSession.startsWith('tg_user_') || !telegramChatId;
 
       // 1. Try Bot API first if not explicitly a tg_user session and telegramChatId exists
       if (!preferUserSession && telegramChatId) {
-        const { data: tgConfig } = await supabase
+        let { data: tgConfig } = await adminClient
           .from('telegram_config')
           .select('bot_token')
           .eq('account_id', accountId)
@@ -267,6 +268,17 @@ export async function POST(request: Request) {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
+
+        if (!tgConfig) {
+          const { data: fallbackBot } = await adminClient
+            .from('telegram_config')
+            .select('bot_token')
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          tgConfig = fallbackBot;
+        }
 
         if (tgConfig?.bot_token) {
           try {
@@ -287,7 +299,7 @@ export async function POST(request: Request) {
 
       // 2. Try User Session (Phone Number) if Bot API failed or target is phone number
       if (!tgSendResult) {
-        const { data: userSession } = await supabase
+        let { data: userSession } = await adminClient
           .from('telegram_user_sessions')
           .select('session_string, api_id, api_hash')
           .eq('account_id', accountId)
@@ -295,6 +307,17 @@ export async function POST(request: Request) {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
+
+        if (!userSession) {
+          const { data: fallbackUser } = await adminClient
+            .from('telegram_user_sessions')
+            .select('session_string, api_id, api_hash')
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          userSession = fallbackUser;
+        }
 
         if (userSession?.session_string && targetPhone) {
           try {
