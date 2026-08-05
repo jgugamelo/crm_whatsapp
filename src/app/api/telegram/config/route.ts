@@ -9,6 +9,29 @@ const supabaseAdmin = createAdminClient(
   { db: { schema: 'wacrm' } }
 );
 
+async function getAccountId(supabase: any, userId: string): Promise<string> {
+  try {
+    const { data: pAdmin } = await supabaseAdmin
+      .from('profiles')
+      .select('account_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (pAdmin?.account_id) return pAdmin.account_id;
+
+    const { data: pUser } = await supabase
+      .from('profiles')
+      .select('account_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (pUser?.account_id) return pUser.account_id;
+  } catch (err) {
+    console.error('[telegram/config] Error resolving accountId:', err);
+  }
+  return userId;
+}
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -17,20 +40,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const accountId = await getAccountId(supabase, user.id);
 
-    if (!profile?.account_id) {
-      return NextResponse.json({ error: 'No account linked' }, { status: 403 });
-    }
-
-    const { data: configs } = await supabaseAdmin
+    const { data: configs, error } = await supabaseAdmin
       .from('telegram_config')
       .select('id, bot_name, bot_username, status, created_at')
-      .eq('account_id', profile.account_id);
+      .eq('account_id', accountId);
+
+    if (error) {
+      console.error('[GET /api/telegram/config] Database error:', error);
+    }
 
     return NextResponse.json({ configs: configs ?? [] });
   } catch (err: any) {
@@ -47,15 +66,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('account_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (!profile?.account_id) {
-      return NextResponse.json({ error: 'No account linked' }, { status: 403 });
-    }
+    const accountId = await getAccountId(supabase, user.id);
 
     const body = await request.json().catch(() => ({}));
     const { bot_token } = body;
@@ -79,14 +90,14 @@ export async function POST(request: Request) {
 
     const webhookSuccess = await setTelegramWebhook(cleanToken, webhookUrl);
     if (!webhookSuccess) {
-      console.warn('[POST /api/telegram/config] Warning: setTelegramWebhook returned false');
+      console.warn('[POST /api/telegram/config] Warning: setTelegramWebhook returned false for URL:', webhookUrl);
     }
 
-    // Insert or update in database
+    // Insert or update in database (wacrm.telegram_config)
     const { data: existing } = await supabaseAdmin
       .from('telegram_config')
       .select('id')
-      .eq('account_id', profile.account_id)
+      .eq('account_id', accountId)
       .eq('bot_token', cleanToken)
       .maybeSingle();
 
@@ -101,15 +112,20 @@ export async function POST(request: Request) {
         })
         .eq('id', existing.id);
     } else {
-      await supabaseAdmin
+      const { error: insertErr } = await supabaseAdmin
         .from('telegram_config')
         .insert({
-          account_id: profile.account_id,
+          account_id: accountId,
           bot_token: cleanToken,
           bot_name: botInfo.first_name,
           bot_username: botInfo.username,
           status: 'active',
         });
+
+      if (insertErr) {
+        console.error('[POST /api/telegram/config] Insert error:', insertErr);
+        return NextResponse.json({ error: `Erro ao salvar no banco: ${insertErr.message}` }, { status: 500 });
+      }
     }
 
     return NextResponse.json({
