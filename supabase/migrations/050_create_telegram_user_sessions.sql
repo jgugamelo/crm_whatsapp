@@ -12,10 +12,15 @@ CREATE TABLE IF NOT EXISTS wacrm.telegram_user_sessions (
   telegram_user_id TEXT,
   first_name TEXT,
   username TEXT,
+  api_id TEXT,
+  api_hash TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE wacrm.telegram_user_sessions ADD COLUMN IF NOT EXISTS api_id TEXT;
+ALTER TABLE wacrm.telegram_user_sessions ADD COLUMN IF NOT EXISTS api_hash TEXT;
 
 -- RLS for telegram_user_sessions
 ALTER TABLE wacrm.telegram_user_sessions ENABLE ROW LEVEL SECURITY;

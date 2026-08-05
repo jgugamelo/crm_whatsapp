@@ -289,7 +289,7 @@ export async function POST(request: Request) {
       if (!tgSendResult) {
         const { data: userSession } = await supabase
           .from('telegram_user_sessions')
-          .select('session_string')
+          .select('session_string, api_id, api_hash')
           .eq('account_id', accountId)
           .eq('status', 'active')
           .order('created_at', { ascending: false })
@@ -298,7 +298,13 @@ export async function POST(request: Request) {
 
         if (userSession?.session_string && targetPhone) {
           try {
-            tgSendResult = await sendTelegramUserMessage(userSession.session_string, targetPhone, content_text || media_url || '');
+            tgSendResult = await sendTelegramUserMessage(
+              userSession.session_string,
+              targetPhone,
+              content_text || media_url || '',
+              (userSession as any)?.api_id,
+              (userSession as any)?.api_hash
+            );
           } catch (userErr: any) {
             console.error('[send/route.ts] Telegram User Session error:', userErr);
             return NextResponse.json(

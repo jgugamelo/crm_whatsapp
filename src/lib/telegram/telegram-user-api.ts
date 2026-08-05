@@ -1,15 +1,15 @@
 import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 
-const DEFAULT_API_ID = Number(process.env.TELEGRAM_API_ID) || 0;
-const DEFAULT_API_HASH = process.env.TELEGRAM_API_HASH || '';
+const DEFAULT_API_ID = Number(process.env.TELEGRAM_API_ID) || 24981928;
+const DEFAULT_API_HASH = process.env.TELEGRAM_API_HASH || 'a3f89028a2ef868461759600e57f2022';
 
 // Temporary store for pending auth flows in memory
 const pendingAuthMap = new Map<string, { client: TelegramClient; phoneCodeHash: string; apiId: number; apiHash: string }>();
 
 function getCredentials(customApiId?: number | string, customApiHash?: string) {
   const apiId = Number(customApiId) || DEFAULT_API_ID;
-  const apiHash = (customApiHash || DEFAULT_API_HASH).trim();
+  const apiHash = (customApiHash || DEFAULT_API_HASH || '').trim();
 
   if (!apiId || !apiHash) {
     throw new Error('API ID e API Hash do Telegram são necessários. Obtenha em https://my.telegram.org');

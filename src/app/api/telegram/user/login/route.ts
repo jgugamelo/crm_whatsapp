@@ -67,6 +67,8 @@ export async function POST(request: Request) {
           telegram_user_id: res.telegramUserId,
           first_name: res.firstName,
           username: res.username,
+          api_id: api_id ? String(api_id) : undefined,
+          api_hash: api_hash ? String(api_hash) : undefined,
           status: 'active',
           updated_at: new Date().toISOString(),
         })
@@ -81,6 +83,8 @@ export async function POST(request: Request) {
           telegram_user_id: res.telegramUserId,
           first_name: res.firstName,
           username: res.username,
+          api_id: api_id ? String(api_id) : undefined,
+          api_hash: api_hash ? String(api_hash) : undefined,
           status: 'active',
         });
     }
