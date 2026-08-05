@@ -183,18 +183,37 @@ export function MessageThread({
   const [configs, setConfigs] = useState<any[]>([]);
 
   useEffect(() => {
-    // Fetch configurations and set the active session name for VoIP routing
-    fetch("/api/whatsapp/config")
-      .then((res) => res.json())
-      .then((data) => {
-        setConfigs(data.configs || []);
-        if (data && data.provider === "waha" && data.phone_info?.id) {
-          setVoipSession(data.phone_info.id);
-        } else if (data && data.waha_session) {
-          setVoipSession(data.waha_session);
-        }
-      })
-      .catch((err) => console.warn("VoIP/Line config fetch failed, using default:", err));
+    // Fetch configurations for WhatsApp and Telegram
+    Promise.all([
+      fetch("/api/whatsapp/config").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/telegram/config").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/telegram/user/sessions").then((r) => r.json()).catch(() => ({})),
+    ]).then(([wa, tg, tgUser]) => {
+      const allConfigs = [
+        ...(wa.configs || []),
+        ...(tg.configs || []).map((c: any) => ({
+          id: c.id,
+          waha_session: `tg_bot_${c.id}`,
+          channel: "telegram",
+          connected: c.status === "active",
+          phone_info: { display_phone_number: `Telegram Bot: ${c.bot_name || c.bot_username || "Bot"}` },
+        })),
+        ...(tgUser.sessions || []).map((s: any) => ({
+          id: s.id,
+          waha_session: `tg_user_${s.phone_number}`,
+          channel: "telegram",
+          connected: s.status === "active",
+          phone_info: { display_phone_number: `Telegram: ${s.first_name || s.phone_number} (${s.phone_number})` },
+        })),
+      ];
+      setConfigs(allConfigs);
+
+      if (wa && wa.provider === "waha" && wa.phone_info?.id) {
+        setVoipSession(wa.phone_info.id);
+      } else if (wa && wa.waha_session) {
+        setVoipSession(wa.waha_session);
+      }
+    }).catch((err) => console.warn("Line configs fetch failed:", err));
   }, []);
 
   const {
@@ -236,10 +255,13 @@ export function MessageThread({
       refreshTimerRef.current = null;
     }, 700);
   }, [isRefreshing, onRefresh]);
-  const handleDeleteClick = useCallback(async () => {
+
+  const handleDeleteConversationClick = useCallback(async () => {
     if (!conversation || !onDeleteConversation) return;
-    const confirmed = window.confirm("Deseja mesmo excluir esta conversa e todas as suas mensagens?");
-    if (!confirmed) return;
+    if (!confirm("Tem certeza que deseja excluir esta conversa e todo seu histórico? Essa ação não pode ser desfeita.")) {
+      return;
+    }
+
     setIsDeleting(true);
     try {
       await onDeleteConversation(conversation.id);
@@ -252,18 +274,22 @@ export function MessageThread({
     if (!conversation) return;
     try {
       const supabase = createClient();
+      const isTg = sessionName.startsWith("tg_");
+      const channel = isTg ? "telegram" : "whatsapp";
+
+      const updates: any = { waha_session: sessionName, channel };
       const { error } = await supabase
         .from("conversations")
-        .update({ waha_session: sessionName })
+        .update(updates)
         .eq("id", conversation.id);
 
       if (error) throw error;
 
-      onUpdateConversation?.({ waha_session: sessionName });
-      toast.success("Linha alterada com sucesso!");
+      onUpdateConversation?.(updates);
+      toast.success(isTg ? "Linha alterada para Telegram!" : "Linha alterada com sucesso!");
     } catch (err: any) {
-      console.error("Failed to change WhatsApp line:", err);
-      toast.error("Erro ao alterar linha do WhatsApp: " + (err.message || err));
+      console.error("Failed to change line:", err);
+      toast.error("Erro ao alterar linha: " + (err.message || err));
     }
   };
 
@@ -1057,7 +1083,7 @@ export function MessageThread({
           {onDeleteConversation && conversation && (
             <button
               type="button"
-              onClick={handleDeleteClick}
+              onClick={handleDeleteConversationClick}
               disabled={isDeleting}
               aria-label="Deletar conversa"
               title="Deletar Conversa"

@@ -164,18 +164,28 @@ export default function CampanhasPage() {
         .eq("account_id", accountId);
       setPipelines((pipelineList as any) ?? []);
 
-      // Load Active WAHA Sessions for this account
-      const { data: configList } = await supabase
-        .from("whatsapp_config")
-        .select("id, waha_session")
-        .eq("provider", "waha")
-        .eq("account_id", accountId);
+      // Load Active Sessions (WhatsApp + Telegram)
+      const [{ data: configList }, { data: tgBotList }, { data: tgUserList }] = await Promise.all([
+        supabase.from("whatsapp_config").select("id, waha_session").eq("provider", "waha").eq("account_id", accountId),
+        supabase.from("telegram_config").select("id, bot_name, bot_username").eq("status", "active"),
+        supabase.from("telegram_user_sessions").select("id, phone_number, first_name, username").eq("status", "active"),
+      ]);
 
-      const wahaSessions = (configList ?? []).map((c) => ({
-        id: c.id,
-        name: c.waha_session || "Sessão WAHA",
-      }));
-      setSessions(wahaSessions);
+      const allSessions = [
+        ...(configList ?? []).map((c) => ({
+          id: c.id,
+          name: `WhatsApp: ${c.waha_session || "WAHA"}`,
+        })),
+        ...(tgBotList ?? []).map((c) => ({
+          id: c.id,
+          name: `Telegram Bot: ${c.bot_name || c.bot_username}`,
+        })),
+        ...(tgUserList ?? []).map((s) => ({
+          id: s.id,
+          name: `Telegram Linha: ${s.first_name || s.phone_number} (${s.phone_number})`,
+        })),
+      ];
+      setSessions(allSessions);
     } catch (err) {
       console.error("Failed to load campaigns metadata:", err);
     } finally {
@@ -496,7 +506,7 @@ export default function CampanhasPage() {
 
               {/* Sessions Selector */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Sessões de WhatsApp Utilizadas</label>
+                <label className="text-xs font-medium text-muted-foreground">Sessões / Linhas Utilizadas (WhatsApp e Telegram)</label>
                 <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto border border-border p-2 rounded-md">
                   {sessions.length === 0 ? (
                     <span className="text-xs text-muted-foreground">Nenhuma sessão WAHA conectada encontrada.</span>

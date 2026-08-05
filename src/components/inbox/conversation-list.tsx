@@ -93,10 +93,32 @@ export function ConversationList({
       try {
         const supabase = createClient();
 
-        // 1. Fetch configs
-        const res = await fetch("/api/whatsapp/config");
-        const data = await res.json();
-        setConfigs(data.configs || []);
+        // 1. Fetch configs for all channels (WhatsApp + Telegram)
+        const [res, tgRes, tgUserRes] = await Promise.all([
+          fetch("/api/whatsapp/config").then((r) => r.json()).catch(() => ({})),
+          fetch("/api/telegram/config").then((r) => r.json()).catch(() => ({})),
+          fetch("/api/telegram/user/sessions").then((r) => r.json()).catch(() => ({})),
+        ]);
+
+        const allConfigs = [
+          ...(res.configs || []),
+          ...(tgRes.configs || []).map((c: any) => ({
+            id: c.id,
+            waha_session: `tg_bot_${c.id}`,
+            channel: "telegram",
+            connected: c.status === "active",
+            phone_info: { display_phone_number: `Telegram Bot: ${c.bot_name || c.bot_username || "Bot"}` },
+          })),
+          ...(tgUserRes.sessions || []).map((s: any) => ({
+            id: s.id,
+            waha_session: `tg_user_${s.phone_number}`,
+            channel: "telegram",
+            connected: s.status === "active",
+            phone_info: { display_phone_number: `Telegram: ${s.first_name || s.phone_number} (${s.phone_number})` },
+          })),
+        ];
+
+        setConfigs(allConfigs);
 
         // 2. Fetch tags
         const { data: tagsData } = await supabase.from("tags").select("id, name, color").order("name");
