@@ -159,10 +159,11 @@ export async function sendTelegramUserMessage(
   await client.connect();
 
   let peer: any = targetPhoneOrId;
-  const cleanTarget = targetPhoneOrId.replace('tg_', '').replace(/[^\d+]/g, '');
+  const rawTarget = targetPhoneOrId.replace('tg_', '').replace(/[^\d+]/g, '');
+  const cleanTarget = rawTarget.startsWith('+') ? rawTarget : `+${rawTarget}`;
 
   // If target looks like a phone number, import/resolve contact
-  if (cleanTarget.startsWith('+') || cleanTarget.length >= 10) {
+  if (cleanTarget.length >= 10) {
     try {
       const imported: any = await client.invoke(
         new Api.contacts.ImportContacts({

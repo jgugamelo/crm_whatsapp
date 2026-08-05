@@ -250,33 +250,42 @@ export async function POST(request: Request) {
     // Handle Telegram outbound channel routing
     if ((conversation as any)?.channel === 'telegram') {
       const contactObj = (conversation as any)?.contact;
-      const telegramChatId = contactObj?.telegram_chat_id || (contactObj?.phone ? contactObj.phone.replace('tg_', '') : null);
+      const telegramChatId = contactObj?.telegram_chat_id;
+      const targetPhone = contactObj?.phone || telegramChatId;
+      const wahaSession = (conversation as any)?.waha_session || '';
 
       let tgSendResult: { messageId: string } | null = null;
+      const preferUserSession = wahaSession.startsWith('tg_user_') || !telegramChatId;
 
-      // 1. Try Bot API first
-      const { data: tgConfig } = await supabase
-        .from('telegram_config')
-        .select('bot_token')
-        .eq('account_id', accountId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // 1. Try Bot API first if not explicitly a tg_user session and telegramChatId exists
+      if (!preferUserSession && telegramChatId) {
+        const { data: tgConfig } = await supabase
+          .from('telegram_config')
+          .select('bot_token')
+          .eq('account_id', accountId)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (tgConfig?.bot_token && telegramChatId) {
-        if (isMediaKind) {
-          if (message_type === 'image') {
-            tgSendResult = await sendTelegramPhotoMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
-          } else {
-            tgSendResult = await sendTelegramDocumentMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+        if (tgConfig?.bot_token) {
+          try {
+            if (isMediaKind) {
+              if (message_type === 'image') {
+                tgSendResult = await sendTelegramPhotoMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+              } else {
+                tgSendResult = await sendTelegramDocumentMessage(tgConfig.bot_token, telegramChatId, media_url, content_text || undefined);
+              }
+            } else {
+              tgSendResult = await sendTelegramTextMessage(tgConfig.bot_token, telegramChatId, content_text || '');
+            }
+          } catch (botErr) {
+            console.warn('[send/route.ts] Telegram Bot API error, falling back to User Session:', botErr);
           }
-        } else {
-          tgSendResult = await sendTelegramTextMessage(tgConfig.bot_token, telegramChatId, content_text || '');
         }
       }
 
-      // 2. Try User Session (Phone Number) if Bot API wasn't available or target is phone number
+      // 2. Try User Session (Phone Number) if Bot API failed or target is phone number
       if (!tgSendResult) {
         const { data: userSession } = await supabase
           .from('telegram_user_sessions')
@@ -287,17 +296,22 @@ export async function POST(request: Request) {
           .limit(1)
           .maybeSingle();
 
-        if (userSession?.session_string) {
-          const target = contactObj?.phone || telegramChatId;
-          if (target) {
-            tgSendResult = await sendTelegramUserMessage(userSession.session_string, target, content_text || '');
+        if (userSession?.session_string && targetPhone) {
+          try {
+            tgSendResult = await sendTelegramUserMessage(userSession.session_string, targetPhone, content_text || media_url || '');
+          } catch (userErr: any) {
+            console.error('[send/route.ts] Telegram User Session error:', userErr);
+            return NextResponse.json(
+              { error: `Erro no envio via Telegram: ${userErr.message || userErr}` },
+              { status: 500 }
+            );
           }
         }
       }
 
       if (!tgSendResult) {
         return NextResponse.json(
-          { error: 'Nenhuma conta ou Bot do Telegram está ativo para enviar a mensagem.' },
+          { error: 'Nenhuma conta de Telegram (Bot ou Número) com sessão ativa foi encontrada para enviar a mensagem.' },
           { status: 400 }
         );
       }
