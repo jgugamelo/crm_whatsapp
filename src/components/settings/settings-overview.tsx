@@ -178,6 +178,11 @@ export function SettingsOverview({
       ),
     },
     {
+      section: 'channels',
+      loading: false,
+      subtitle: 'Telegram Bot API, Instagram e Messenger',
+    },
+    {
       section: 'members',
       loading: countsLoading,
       subtitle:
