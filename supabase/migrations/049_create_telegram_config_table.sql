@@ -36,7 +36,17 @@ ALTER TABLE wacrm.conversations ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL D
 ALTER TABLE wacrm.messages ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'whatsapp';
 ALTER TABLE wacrm.messages ADD COLUMN IF NOT EXISTS telegram_message_id TEXT;
 
+-- Grant permissions for wacrm schema & tables
+GRANT USAGE ON SCHEMA wacrm TO anon, authenticated, service_role;
+GRANT ALL ON TABLE wacrm.telegram_config TO anon, authenticated, service_role;
+
 -- Recreate public views if needed
 CREATE OR REPLACE VIEW public.conversations AS SELECT * FROM wacrm.conversations;
 CREATE OR REPLACE VIEW public.messages AS SELECT * FROM wacrm.messages;
 CREATE OR REPLACE VIEW public.contacts AS SELECT * FROM wacrm.contacts;
+
+GRANT ALL ON public.telegram_config TO anon, authenticated, service_role;
+GRANT ALL ON public.conversations TO anon, authenticated, service_role;
+GRANT ALL ON public.messages TO anon, authenticated, service_role;
+GRANT ALL ON public.contacts TO anon, authenticated, service_role;
+
