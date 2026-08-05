@@ -371,10 +371,42 @@ export function MessageComposer({
   );
 
   const handlePicked = useCallback(
-    (kind: "image" | "video" | "document", file: File | undefined) => {
-      if (file) void stageUpload(kind, file);
+    async (kind: "image" | "video" | "document", files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      if (files.length === 1) {
+        void stageUpload(kind, files[0]);
+        return;
+      }
+
+      setBusy(true);
+      const toastId = toast.loading(`Enviando ${files.length} mídias...`);
+      try {
+        const fileArray = Array.from(files);
+        for (const file of fileArray) {
+          const max = MEDIA_MAX_BYTES_BY_KIND[kind];
+          if (file.size > max) {
+            toast.error(`Arquivo ${file.name} excede o limite de ${Math.round(max / 1024 / 1024)} MB.`);
+            continue;
+          }
+          const { publicUrl, path } = await uploadAccountMedia(CHAT_MEDIA_BUCKET, file);
+          onSendMedia({
+            kind,
+            mediaUrl: publicUrl,
+            path,
+            filename: kind === "document" ? file.name : undefined,
+            replyToId: replyTo?.id,
+          });
+        }
+        toast.success(`${files.length} mídias enviadas com sucesso!`, { id: toastId });
+        onClearReply?.();
+      } catch (err: any) {
+        toast.error(`Erro ao enviar mídias: ${err.message || err}`, { id: toastId });
+      } finally {
+        setBusy(false);
+      }
     },
-    [stageUpload],
+    [stageUpload, onSendMedia, replyTo?.id, onClearReply]
   );
 
   // ---- Voice recording (client-side Ogg/Opus, no server transcode) ---
@@ -558,30 +590,33 @@ export function MessageComposer({
       <input
         ref={imageInputRef}
         type="file"
+        multiple
         accept={PICKER_ACCEPT.image}
         className="hidden"
         onChange={(e) => {
-          handlePicked("image", e.target.files?.[0]);
+          handlePicked("image", e.target.files);
           e.target.value = "";
         }}
       />
       <input
         ref={videoInputRef}
         type="file"
+        multiple
         accept={PICKER_ACCEPT.video}
         className="hidden"
         onChange={(e) => {
-          handlePicked("video", e.target.files?.[0]);
+          handlePicked("video", e.target.files);
           e.target.value = "";
         }}
       />
       <input
         ref={documentInputRef}
         type="file"
+        multiple
         accept={PICKER_ACCEPT.document}
         className="hidden"
         onChange={(e) => {
-          handlePicked("document", e.target.files?.[0]);
+          handlePicked("document", e.target.files);
           e.target.value = "";
         }}
       />

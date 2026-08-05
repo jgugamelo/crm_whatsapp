@@ -834,18 +834,34 @@ export default function CampanhasPage() {
                           <input
                             id={`file-upload-${i}`}
                             type="file"
+                            multiple
                             accept="image/*"
                             className="hidden"
                             onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const toastId = toast.loading("Enviando imagem...");
+                              const files = e.target.files;
+                              if (!files || files.length === 0) return;
+                              const toastId = toast.loading(`Enviando ${files.length} mídias...`);
                               try {
-                                const res = await uploadAccountMedia("chat-media", file);
+                                const fileArray = Array.from(files);
                                 const updated = [...mensagens];
-                                updated[i].url = res.publicUrl;
+
+                                for (let fIdx = 0; fIdx < fileArray.length; fIdx++) {
+                                  const file = fileArray[fIdx];
+                                  const res = await uploadAccountMedia("chat-media", file);
+                                  if (fIdx === 0) {
+                                    updated[i].url = res.publicUrl;
+                                  } else {
+                                    updated.splice(i + fIdx, 0, {
+                                      id: String(Date.now() + fIdx),
+                                      tipo: "imagem",
+                                      conteudo: "",
+                                      url: res.publicUrl,
+                                    });
+                                  }
+                                }
+
                                 setMensagens(updated);
-                                toast.success("Imagem enviada com sucesso!", { id: toastId });
+                                toast.success(`${files.length} imagem(ns) enviada(s) com sucesso!`, { id: toastId });
                               } catch (err: any) {
                                 toast.error(`Erro no upload: ${err.message}`, { id: toastId });
                               }
