@@ -57,7 +57,7 @@ import { SettingsPanelHead } from "./settings-panel-head";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useEffect } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Trash2 } from "lucide-react";
 
 export function ChannelsSettings() {
   const [connecting, setConnecting] = useState(false);
@@ -112,6 +112,17 @@ export function ChannelsSettings() {
       toast.error(err.message || "Falha na conexão com o Telegram");
     } finally {
       setSavingTg(false);
+    }
+  };
+
+  const handleDeleteTelegram = async (id: string) => {
+    try {
+      const res = await fetch(`/api/telegram/config?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Erro ao desconectar bot");
+      toast.success("Bot desconectado.");
+      await fetchTgConfigs();
+    } catch (err: any) {
+      toast.error(err.message || "Falha ao desconectar");
     }
   };
 
@@ -190,17 +201,28 @@ export function ChannelsSettings() {
             <div className="pt-3 border-t border-sky-500/20 space-y-2">
               <h5 className="text-xs font-semibold text-foreground">Bots Conectados:</h5>
               {tgConfigs.map((cfg) => (
-                <div key={cfg.id} className="flex items-center justify-between p-2.5 rounded-lg border border-sky-500/20 bg-background/60 text-xs">
+                <div key={cfg.id} className="flex items-center justify-between p-2.5 rounded-lg border border-sky-500/20 bg-background/80 text-xs shadow-sm">
                   <div className="flex items-center gap-2">
-                    <Send className="size-4 text-sky-500" />
+                    <Send className="size-4 text-sky-500 shrink-0" />
                     <div>
-                      <span className="font-semibold">{cfg.bot_name}</span>
-                      <span className="text-muted-foreground ml-1 font-mono text-[11px]">(@{cfg.bot_username})</span>
+                      <span className="font-semibold text-foreground">{cfg.bot_name}</span>
+                      <span className="text-muted-foreground ml-1.5 font-mono text-[11px]">(@{cfg.bot_username})</span>
                     </div>
                   </div>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    <CheckCircle2 className="size-3" /> Webhook Ativo
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <CheckCircle2 className="size-3" /> Webhook Ativo
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteTelegram(cfg.id)}
+                      className="size-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                      title="Desconectar Bot"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

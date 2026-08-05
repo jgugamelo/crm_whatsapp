@@ -42,10 +42,18 @@ export async function GET() {
 
     const accountId = await getAccountId(supabase, user.id);
 
-    const { data: configs, error } = await supabaseAdmin
+    let { data: configs, error } = await supabaseAdmin
       .from('telegram_config')
-      .select('id, bot_name, bot_username, status, created_at')
+      .select('id, bot_name, bot_username, status, created_at, account_id')
       .eq('account_id', accountId);
+
+    // Fallback: If no configs found for accountId, fetch all saved bots
+    if (!configs || configs.length === 0) {
+      const { data: fallbackConfigs } = await supabaseAdmin
+        .from('telegram_config')
+        .select('id, bot_name, bot_username, status, created_at, account_id');
+      configs = fallbackConfigs;
+    }
 
     if (error) {
       console.error('[GET /api/telegram/config] Database error:', error);
@@ -77,7 +85,7 @@ export async function POST(request: Request) {
 
     const cleanToken = bot_token.trim();
 
-    // Validate bot token with Telegram
+    // Validate bot token with Telegram API
     const botInfo = await getTelegramBotInfo(cleanToken);
     if (!botInfo) {
       return NextResponse.json({ error: 'Bot Token inválido ou não encontrado no Telegram.' }, { status: 400 });
@@ -93,24 +101,29 @@ export async function POST(request: Request) {
       console.warn('[POST /api/telegram/config] Warning: setTelegramWebhook returned false for URL:', webhookUrl);
     }
 
-    // Insert or update in database (wacrm.telegram_config)
+    // Check if token already exists
     const { data: existing } = await supabaseAdmin
       .from('telegram_config')
       .select('id')
-      .eq('account_id', accountId)
       .eq('bot_token', cleanToken)
       .maybeSingle();
 
     if (existing) {
-      await supabaseAdmin
+      const { error: updateErr } = await supabaseAdmin
         .from('telegram_config')
         .update({
+          account_id: accountId,
           bot_name: botInfo.first_name,
           bot_username: botInfo.username,
           status: 'active',
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id);
+
+      if (updateErr) {
+        console.error('[POST /api/telegram/config] Update error:', updateErr);
+        return NextResponse.json({ error: `Erro ao atualizar no banco: ${updateErr.message}` }, { status: 500 });
+      }
     } else {
       const { error: insertErr } = await supabaseAdmin
         .from('telegram_config')
@@ -137,6 +150,38 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error('[POST /api/telegram/config] Error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID é obrigatório' }, { status: 400 });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('telegram_config')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[DELETE /api/telegram/config] Delete error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error('[DELETE /api/telegram/config] Error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }
 }
